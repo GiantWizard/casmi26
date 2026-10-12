@@ -23,14 +23,16 @@ Example (Mac):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from common import (
-    STANDARD_ADDUCTS, adduct_group, is_clean_answer, load_key_set,
+    STANDARD_ADDUCTS, adduct_group, is_clean_answer, keys_parallel, load_key_set,
     normalize_adduct, parent_key, read_spectra, scorer_key,
 )
 
@@ -66,6 +68,18 @@ def normalize_mode(raw, adduct):
     return None
 
 
+def ce_array(raw: str, nce: bool, precursor_mz: float) -> np.ndarray:
+    """All energies in a CE string as an eV array, like test.parquet ('20,40,60' -> [20, 40, 60]).
+
+    NCE uses the usual Thermo approximation eV = NCE * m/z / 500. Unparseable -> empty array,
+    which the kernels already treat as "no CE".
+    """
+    vals = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", raw or "")]
+    if nce and np.isfinite(precursor_mz):
+        vals = [v * precursor_mz / 500.0 for v in vals]
+    return np.asarray(vals, dtype=float)
+
+
 def resample(df: pd.DataFrame, per_mol: float, seed: int) -> pd.DataFrame:
     """Draw spectra per molecule so the mean count matches the test (~3.03, D742055).
 
@@ -98,6 +112,8 @@ def main():
                     help="Popularity at or below this is 'obscure' (default: bottom half)")
     ap.add_argument("--exclude-panel", help="Keys to drop (e.g. the Enveda NP panel) so sets stay disjoint")
     ap.add_argument("--adducts", nargs="*", default=list(STANDARD_ADDUCTS))
+    ap.add_argument("--instruments", nargs="*", default=None,
+                    help="Keep only these instrument_type values (substring, case-insensitive), e.g. timsTOF")
     ap.add_argument("--min-peaks", type=int, default=3)
     ap.add_argument("--max-precursor", type=float, default=1500.0)
     ap.add_argument("--spectra-per-mol", type=float, default=3.03)
@@ -127,7 +143,9 @@ def main():
         print("WARNING: no SMILES in seen tables; parent-key (tautomer/salt) leak check is OFF")
 
     # ---- spectra ------------------------------------------------------------
-    spec = pd.concat([read_spectra(p) for p in args.spectra], ignore_index=True)
+    # Rows whose stored InChIKey14 is already seen are skipped while reading (memory); the
+    # SMILES-based scorer/parent checks below still catch the ~1.6% whose stored key differs.
+    spec = pd.concat([read_spectra(p, skip_ik14=seen_s) for p in args.spectra], ignore_index=True)
     step("spectra read", len(spec))
 
     lib = spec["library"].fillna("").str.lower() + " " + spec["source"].str.lower()
@@ -138,14 +156,22 @@ def main():
     spec = spec[spec["adduct"].isin(args.adducts)]
     step("after standard-adduct filter", len(spec))
 
+    spec = spec[spec["instrument_type"] != "other"]
+    step("after high-res instrument filter", len(spec))
+
+    if args.instruments:
+        inst = spec["instrument_type"].fillna("").str.lower()
+        spec = spec[inst.apply(lambda x: any(i.lower() in x for i in args.instruments))]
+        step("after instrument filter", len(spec))
+
     npk = spec["ms2_mzs"].map(len)
     spec = spec[(npk >= args.min_peaks) & (spec["precursor_mz"] <= args.max_precursor)]
     step("after peak/precursor filter", len(spec))
 
     # Structure identity, computed once per unique SMILES.
     uniq = spec["smiles"].dropna().unique()
-    skey = {s: scorer_key(s) for s in uniq}
-    pkey = {s: parent_key(s) for s in uniq}
+    skey = keys_parallel(uniq, scorer_key)
+    pkey = keys_parallel(uniq, parent_key)
     clean = {s: is_clean_answer(s) for s in uniq}
     spec["scorer_key"] = spec["smiles"].map(skey)
     spec["parent_key"] = spec["smiles"].map(pkey)
@@ -207,7 +233,9 @@ def main():
         step("after --max-molecules cap", len(mols))
 
     mols = mols.sort_values("scorer_key").reset_index(drop=True)
-    mols["molecule_id"] = [f"onp_{i:05d}" for i in range(len(mols))]
+    # Same id shapes as test.parquet (m_xxxxxx / s_xxxxxxxx); stable across rebuilds.
+    mols["molecule_id"] = ["m_" + hashlib.md5(k.encode()).hexdigest()[:8] for k in mols["scorer_key"]]
+    assert mols["molecule_id"].is_unique
     spec = spec.merge(mols[["scorer_key", "molecule_id"]], on="scorer_key")
 
     # ---- competition-shaped output -----------------------------------------
@@ -215,19 +243,23 @@ def main():
     spec["ms2_normalized_intensities"] = spec["ms2_intensities"].map(
         lambda a: a / a.max() if len(a) and a.max() > 0 else a)
     spec["base_peak_intensity"] = spec["ms2_intensities"].map(lambda a: float(a.max()) if len(a) else np.nan)
-    spec["collision_energy_orig"] = spec["collision_energy_raw"]
-    spec["collision_energy_ev"] = pd.to_numeric(
-        spec["collision_energy_raw"].astype(str).str.extract(r"([\d.]+)")[0], errors="coerce")
-    spec["collision_energy_orig_units"] = np.where(
-        spec["collision_energy_raw"].astype(str).str.contains("%|nce", case=False), "NCE", "eV")
+    spec["collision_energy_orig"] = spec["collision_energy_raw"].astype(str)
+    is_nce = spec["collision_energy_orig"].str.contains("%|nce|hcd", case=False)
+    spec["collision_energy_orig_units"] = "eV"  # test.parquet is all eV; NCE is converted below
+    spec["collision_energy_ev"] = [
+        ce_array(raw, nce, pmz) for raw, nce, pmz in
+        zip(spec["collision_energy_orig"], is_nce, spec["precursor_mz"])]
     test_cols = ["molecule_id", "spectrum_id", "ms2_mzs", "ms2_normalized_intensities",
                  "base_peak_intensity", "adduct", "ionization_mode", "instrument_type",
                  "precursor_mz", "collision_energy_ev", "collision_energy_orig",
                  "collision_energy_orig_units"]
 
     full = spec.copy()
-    full["spectrum_id"] = full["source"] + ":" + full["record_id"].astype(str)
-    full[test_cols + ["source", "scorer_key"]].to_parquet(out / "spectra_all.parquet", index=False)
+    full["spectrum_id"] = ["s_" + hashlib.md5(f"{a}:{b}:{i}".encode()).hexdigest()[:8]
+                           for i, (a, b) in enumerate(zip(full["source"], full["record_id"]))]
+    full["record_ref"] = full["source"] + ":" + full["record_id"].astype(str)
+    assert full["spectrum_id"].is_unique
+    full[test_cols + ["source", "record_ref", "scorer_key"]].to_parquet(out / "spectra_all.parquet", index=False)
 
     for d in range(args.draws):
         draw = resample(full, args.spectra_per_mol, args.seed + d)
@@ -238,7 +270,12 @@ def main():
     # is 'ft_only' only if no base-GLACIER adduct exists anywhere for it.
     has_base = full.groupby("molecule_id")["adduct"].agg(lambda x: any(adduct_group(a) == "base_glacier" for a in x))
     mols["adduct_group"] = mols["molecule_id"].map(has_base).map({True: "base_glacier", False: "ft_only"})
+    tims = full.groupby("molecule_id")["instrument_type"].agg(
+        lambda x: any("tims" in str(v).lower() for v in x))
+    mols["timstof"] = mols["molecule_id"].map(tims)
     mols.to_csv(out / "solution.csv", index=False)
+    pd.DataFrame({"molecule_id": mols["molecule_id"], "smiles": ";".join(["CCO"] * 25)}).to_csv(
+        out / "sample_submission.csv", index=False)
 
     # Summary
     summ = {

@@ -28,6 +28,9 @@ K = 25
 
 def load_preds(path: str) -> dict[str, list[str]]:
     df = pd.read_csv(path) if not path.endswith(".parquet") else pd.read_parquet(path)
+    if set(df.columns) == {"molecule_id", "smiles"}:  # competition format: ';'-joined top 25
+        return {r.molecule_id: [x.strip() for x in str(r.smiles).split(";") if x.strip()]
+                for r in df.itertuples()}
     if "rank" in df.columns:
         smi = next(c for c in df.columns if c.lower() in ("smiles", "pred", "candidate"))
         df = df.sort_values(["molecule_id", "rank"])
@@ -96,7 +99,7 @@ def main():
     rr = pd.DataFrame(rr)
 
     slices = {"all": pd.Series(True, index=sol.index)}
-    for col in ("adduct_group", "cls", "obscure"):
+    for col in ("adduct_group", "cls", "obscure", "timstof"):
         if col in sol.columns and sol[col].notna().any():
             for v in sorted(sol[col].dropna().unique(), key=str):
                 slices[f"{col}={v}"] = sol[col] == v
