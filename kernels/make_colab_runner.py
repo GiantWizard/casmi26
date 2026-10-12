@@ -4,7 +4,7 @@ The runner offloads GPU jobs from Kaggle's weekly quota to Colab:
   1. reads jobs from the private Kaggle dataset giantwizard/casmi26-jc-colab-jobs
      (each job = a Kaggle notebook + its kernel-metadata.json, as generated in kernels/),
   2. rebuilds /kaggle/input from the job's dataset_sources + competition_sources,
-  3. runs the notebook with papermill on a Python 3.13 venv (the pinned RDKit wheels are cp313),
+  3. runs the notebook as a plain script on a Python 3.13 venv (the pinned RDKit wheels are cp313),
   4. uploads the job's small outputs to giantwizard/casmi26-jc-colab-out (one folder per job).
 
     python kernels/make_colab_runner.py --jobs jc-onp-eval-d2 jc-onp-eval-d3   # writes colab nb + jobs dir
@@ -66,6 +66,8 @@ def sh(cmd, check=True):
     if check and r.returncode: raise RuntimeError(f'failed: {cmd}')
     return r
 sh('kaggle competitions list -s casmi | head -4')
+OUT = '/content/out'
+shutil.rmtree(OUT, ignore_errors=True)
 sh('nvidia-smi --query-gpu=name,memory.total --format=csv')
 """),
     code(r"""
@@ -76,11 +78,12 @@ sh(f'kaggle datasets download {JOBS_DS} -p /content/jobs --unzip')
 for z in glob.glob('/content/jobs/**/*.zip', recursive=True):
     sh(f'cd "{os.path.dirname(z)}" && unzip -oq "{z}" && rm "{z}"')
 jobs = json.load(open('/content/jobs/jobs.json'))
-OUT = '/content/out'; os.makedirs(OUT, exist_ok=True)
+os.makedirs(OUT, exist_ok=True)
 have_out = sh(f'kaggle datasets download {OUT_DS} -p {OUT} --unzip', check=False).returncode == 0
-for z in glob.glob(f'{OUT}/*.zip'):
-    sh(f'cd {OUT} && unzip -oq "{z}" -d "{z[:-4]}" && rm "{z}"')
-done = {d for d in os.listdir(OUT) if os.path.exists(f'{OUT}/{d}/DONE')}
+for p in [p for p in os.listdir(OUT) if '__' not in p and p != 'dataset-metadata.json']:
+    pp = f'{OUT}/{p}'                     # files from the first, folder-less upload format
+    shutil.rmtree(pp) if os.path.isdir(pp) else os.remove(pp)
+done = {p[:-len('__DONE')] for p in os.listdir(OUT) if p.endswith('__DONE')}
 todo = [j for i, j in enumerate(jobs) if j['name'] not in done and i % N_SESSIONS == SESSION]
 print('jobs:', [j['name'] for j in jobs], '| already done:', sorted(done), '| to run:', [j['name'] for j in todo])
 """),
@@ -119,39 +122,43 @@ def fetch_inputs(meta):
         for z in glob.glob(f'{dst}/*.zip'):
             sh(f'cd {dst} && unzip -oq "{z}" && rm "{z}"')
         pathlib.Path(f'{dst}/.ok').touch()
-def repath_notebook(src, dst):
+def notebook_to_script(src, dst):
+    # Run jobs as plain Python on the 3.13 venv: Colab's global IPython config forces its own kernel class,
+    # which a separate interpreter can't load. Paths are rewritten from /kaggle/ to /content/kaggle/.
     nb = json.load(open(src))
-    for c in nb['cells']:
-        if c['cell_type'] == 'code':
-            t = ''.join(c['source']) if isinstance(c['source'], list) else c['source']
-            c['source'] = t.replace('/kaggle/', '/content/kaggle/')
-    json.dump(nb, open(dst, 'w'))
+    parts = ['import builtins\n'
+             'def display(*a, **k):\n    print(*a)\n'
+             'builtins.display = display\n']
+    for i, c in enumerate(nb['cells']):
+        if c['cell_type'] != 'code':
+            continue
+        t = ''.join(c['source']) if isinstance(c['source'], list) else c['source']
+        parts.append(f'print("=== cell {i} ===", flush=True)\n' + t.replace('/kaggle/', '/content/kaggle/') + '\n')
+    open(dst, 'w').write('\n'.join(parts))
 """),
     code(r"""
-# 5. Run each job and upload its results after it finishes
+# 5. Run each job and upload its results after it finishes (files are flat, prefixed "<job>__")
 KEEP = ('.csv', '.json', '.log', '.txt')
-def collect(job_dir, dst):
-    os.makedirs(dst, exist_ok=True)
+def collect(job_dir, name):
     for p in glob.glob(f'{job_dir}/*') + glob.glob(f'{job_dir}/*_work/*.json'):
         if os.path.isfile(p) and p.endswith(KEEP):
-            rel = os.path.relpath(p, job_dir); os.makedirs(os.path.dirname(f'{dst}/{rel}'), exist_ok=True)
-            shutil.copy(p, f'{dst}/{rel}')
+            rel = os.path.relpath(p, job_dir).replace('/', '__')
+            shutil.copy(p, f'{OUT}/{name}__{rel}')
 def upload(msg):
-    # another session may have uploaded since we started: merge its finished jobs in before versioning
+    # merge files another session uploaded meanwhile, then publish a new version
     tmp = f'/content/out_sync_{SESSION}'
     shutil.rmtree(tmp, ignore_errors=True)
     if sh(f'kaggle datasets download {OUT_DS} -p {tmp} --unzip', check=False).returncode == 0:
-        for z in glob.glob(f'{tmp}/*.zip'):
-            d = os.path.basename(z)[:-4]
-            if not os.path.exists(f'{OUT}/{d}/DONE'):
-                sh(f'unzip -oq "{z}" -d "{OUT}/{d}"')
+        for p in glob.glob(f'{tmp}/*'):
+            if os.path.isfile(p) and not os.path.exists(f'{OUT}/{os.path.basename(p)}'):
+                shutil.copy(p, OUT)
     json.dump({'title': 'casmi26-jc-colab-out', 'id': OUT_DS, 'licenses': [{'name': 'other'}]},
               open(f'{OUT}/dataset-metadata.json', 'w'))
     global have_out
     if have_out:
-        sh(f'kaggle datasets version -p {OUT} -m "{msg}" --dir-mode zip -q')
+        sh(f'kaggle datasets version -p {OUT} -m "{msg}" -q')
     else:
-        sh(f'kaggle datasets create -p {OUT} --dir-mode zip -q'); have_out = True
+        sh(f'kaggle datasets create -p {OUT} -q'); have_out = True
 
 for job in todo:
     name, t0 = job['name'], time.time()
@@ -159,19 +166,19 @@ for job in todo:
     fetch_inputs(meta)
     WK = f'{KROOT}/working'
     shutil.rmtree(WK, ignore_errors=True); os.makedirs(WK)
-    nb_in = '/content/run.ipynb'
-    repath_notebook(f"/content/jobs/{job['dir']}/{meta['code_file']}", nb_in)
-    log = open(f'{WK}/run.log', 'w')
-    r = subprocess.run([PY, '-m', 'papermill', nb_in, f'{WK}/__notebook__.ipynb', '-k', 'py313',
-                        '--log-output', '--cwd', WK], stdout=log, stderr=subprocess.STDOUT, text=True)
-    log.close()
-    dst = f'{OUT}/{name}'
-    shutil.rmtree(dst, ignore_errors=True)
-    collect(WK, dst)
+    script = f'{WK}/job.py'
+    notebook_to_script(f"/content/jobs/{job['dir']}/{meta['code_file']}", script)
+    with open(f'{WK}/run.log', 'w') as log:
+        r = subprocess.run([PY, '-u', script], cwd=WK, stdout=log, stderr=subprocess.STDOUT, text=True)
+    for p in glob.glob(f'{OUT}/{name}__*'):
+        os.remove(p)                      # a re-run replaces this job's old files
+    collect(WK, name)
     status = 'ok' if r.returncode == 0 else f'error {r.returncode}'
-    json.dump({'status': status, 'seconds': round(time.time() - t0), 'gpu': sh('nvidia-smi --query-gpu=name --format=csv,noheader').stdout.strip()},
-              open(f'{dst}/colab_status.json', 'w'))
-    pathlib.Path(f'{dst}/DONE').touch()
+    json.dump({'status': status, 'seconds': round(time.time() - t0),
+               'gpu': sh('nvidia-smi --query-gpu=name --format=csv,noheader').stdout.strip()},
+              open(f'{OUT}/{name}__colab_status.json', 'w'))
+    if status == 'ok':
+        pathlib.Path(f'{OUT}/{name}__DONE').touch()
     print(name, status, f'{(time.time()-t0)/3600:.1f} h', flush=True)
     print(open(f'{WK}/run.log').read()[-3000:])
     upload(f'{name}: {status}')
