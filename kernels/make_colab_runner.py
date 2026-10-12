@@ -99,23 +99,33 @@ PY = '/content/py313/bin/python'
 sh(f'{PY} -c "import sys, torch; print(sys.version); print(torch.__version__, torch.cuda.is_available())"')
 """),
     code(r"""
-# 4. Inputs: /kaggle/input/<slug> for every dataset and competition a job reads (downloaded once, reused)
-os.makedirs('/content/kaggle/input', exist_ok=True)
-if not os.path.exists('/kaggle'):
-    os.symlink('/content/kaggle', '/kaggle')
+# 4. Inputs under /content/kaggle (Colab ships its own read-only /kaggle/input, so the pipeline's /kaggle/ paths are
+#    rewritten to /content/kaggle/ in the job notebook and in the downloaded dataset code)
+KROOT = '/content/kaggle'
+os.makedirs(f'{KROOT}/input', exist_ok=True)
+def repath_tree(d):
+    sh(f"grep -rlI --include='*.py' --include='*.sh' --include='*.json' '/kaggle/' '{d}' | xargs -r sed -i 's#\\([^t]\\)/kaggle/#\\1/content/kaggle/#g; s#^/kaggle/#/content/kaggle/#'", check=False)
 def fetch_inputs(meta):
     for src in meta.get('dataset_sources', []):
-        dst = f"/kaggle/input/{src.split('/')[1]}"
+        dst = f"{KROOT}/input/{src.split('/')[1]}"
         if os.path.exists(f'{dst}/.ok'): continue
         sh(f'kaggle datasets download {src} -p {dst} --unzip')
+        repath_tree(dst)
         pathlib.Path(f'{dst}/.ok').touch()
     for comp in meta.get('competition_sources', []):
-        dst = f'/kaggle/input/{comp}'
+        dst = f'{KROOT}/input/{comp}'
         if os.path.exists(f'{dst}/.ok'): continue
         sh(f'kaggle competitions download {comp} -p {dst}')
         for z in glob.glob(f'{dst}/*.zip'):
             sh(f'cd {dst} && unzip -oq "{z}" && rm "{z}"')
         pathlib.Path(f'{dst}/.ok').touch()
+def repath_notebook(src, dst):
+    nb = json.load(open(src))
+    for c in nb['cells']:
+        if c['cell_type'] == 'code':
+            t = ''.join(c['source']) if isinstance(c['source'], list) else c['source']
+            c['source'] = t.replace('/kaggle/', '/content/kaggle/')
+    json.dump(nb, open(dst, 'w'))
 """),
     code(r"""
 # 5. Run each job and upload its results after it finishes
@@ -147,21 +157,23 @@ for job in todo:
     name, t0 = job['name'], time.time()
     meta = json.load(open(f"/content/jobs/{job['dir']}/kernel-metadata.json"))
     fetch_inputs(meta)
-    shutil.rmtree('/kaggle/working', ignore_errors=True); os.makedirs('/kaggle/working')
-    nb_in = f"/content/jobs/{job['dir']}/{meta['code_file']}"
-    log = open('/kaggle/working/run.log', 'w')
-    r = subprocess.run([PY, '-m', 'papermill', nb_in, '/kaggle/working/__notebook__.ipynb', '-k', 'py313',
-                        '--log-output', '--cwd', '/kaggle/working'], stdout=log, stderr=subprocess.STDOUT, text=True)
+    WK = f'{KROOT}/working'
+    shutil.rmtree(WK, ignore_errors=True); os.makedirs(WK)
+    nb_in = '/content/run.ipynb'
+    repath_notebook(f"/content/jobs/{job['dir']}/{meta['code_file']}", nb_in)
+    log = open(f'{WK}/run.log', 'w')
+    r = subprocess.run([PY, '-m', 'papermill', nb_in, f'{WK}/__notebook__.ipynb', '-k', 'py313',
+                        '--log-output', '--cwd', WK], stdout=log, stderr=subprocess.STDOUT, text=True)
     log.close()
     dst = f'{OUT}/{name}'
     shutil.rmtree(dst, ignore_errors=True)
-    collect('/kaggle/working', dst)
+    collect(WK, dst)
     status = 'ok' if r.returncode == 0 else f'error {r.returncode}'
     json.dump({'status': status, 'seconds': round(time.time() - t0), 'gpu': sh('nvidia-smi --query-gpu=name --format=csv,noheader').stdout.strip()},
               open(f'{dst}/colab_status.json', 'w'))
     pathlib.Path(f'{dst}/DONE').touch()
     print(name, status, f'{(time.time()-t0)/3600:.1f} h', flush=True)
-    print(open('/kaggle/working/run.log').read()[-3000:])
+    print(open(f'{WK}/run.log').read()[-3000:])
     upload(f'{name}: {status}')
 print('all jobs finished')
 """),
