@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ap = argparse.ArgumentParser()
 ap.add_argument("--src", default="jc-gate")
-ap.add_argument("--out", default="jc-lr")
+ap.add_argument("--out", default="jc-lr2")  # "jc-lr" collides with the casmi26-jc-lr dataset slug on Kaggle
 args = ap.parse_args()
 src = ROOT / "kernels" / args.src
 meta = json.loads((src / "kernel-metadata.json").read_text())
