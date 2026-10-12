@@ -43,6 +43,15 @@ private Kaggle dataset (`giantwizard/casmi26-jc-colab-out`) where they are picke
 
 Then *Runtime → Run all*. Each job takes about 2–4 hours on a T4. Jobs already uploaded are skipped, so if
 Colab disconnects, just *Run all* again.
+
+**Several sessions at once:** open this notebook in one tab per session, and in the first code cell set
+`N_SESSIONS` to the number of tabs and `SESSION` to 0, 1, 2, … in each tab. Each tab then runs only its own share
+of the jobs.
+"""),
+    code(r"""
+# 0. Parallel sessions: one tab per session, each with its own SESSION number (0, 1, 2, ...)
+N_SESSIONS = 1
+SESSION = 0
 """),
     code(r"""
 # 1. Kaggle credentials and CLI
@@ -72,7 +81,7 @@ have_out = sh(f'kaggle datasets download {OUT_DS} -p {OUT} --unzip', check=False
 for z in glob.glob(f'{OUT}/*.zip'):
     sh(f'cd {OUT} && unzip -oq "{z}" -d "{z[:-4]}" && rm "{z}"')
 done = {d for d in os.listdir(OUT) if os.path.exists(f'{OUT}/{d}/DONE')}
-todo = [j for j in jobs if j['name'] not in done]
+todo = [j for i, j in enumerate(jobs) if j['name'] not in done and i % N_SESSIONS == SESSION]
 print('jobs:', [j['name'] for j in jobs], '| already done:', sorted(done), '| to run:', [j['name'] for j in todo])
 """),
     code(r"""
@@ -118,6 +127,14 @@ def collect(job_dir, dst):
             rel = os.path.relpath(p, job_dir); os.makedirs(os.path.dirname(f'{dst}/{rel}'), exist_ok=True)
             shutil.copy(p, f'{dst}/{rel}')
 def upload(msg):
+    # another session may have uploaded since we started: merge its finished jobs in before versioning
+    tmp = f'/content/out_sync_{SESSION}'
+    shutil.rmtree(tmp, ignore_errors=True)
+    if sh(f'kaggle datasets download {OUT_DS} -p {tmp} --unzip', check=False).returncode == 0:
+        for z in glob.glob(f'{tmp}/*.zip'):
+            d = os.path.basename(z)[:-4]
+            if not os.path.exists(f'{OUT}/{d}/DONE'):
+                sh(f'unzip -oq "{z}" -d "{OUT}/{d}"')
     json.dump({'title': 'casmi26-jc-colab-out', 'id': OUT_DS, 'licenses': [{'name': 'other'}]},
               open(f'{OUT}/dataset-metadata.json', 'w'))
     global have_out
