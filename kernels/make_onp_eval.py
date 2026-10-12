@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ap = argparse.ArgumentParser()
 ap.add_argument("--draw", type=int, default=0)
 ap.add_argument("--dataset", default="giantwizard/casmi26-jc-onp")
+ap.add_argument("--tag", default="", help="slug suffix for a second eval set, e.g. 'b' -> casmi26-jc-onp-eval-b-d0")
 ap.add_argument("--visible", action="store_true",
                 help="Run on the competition's visible test.parquet (train-derived, i.e. class-1-like) in full, "
                      "instead of an ONP draw. Used to measure what gate changes cost when the answer is in the library.")
@@ -113,7 +114,7 @@ for _vname in VARIANTS:
 # the commit's submission.csv is c2 (the current pick); nothing here is ever submitted
 shutil.copy('final_c2.csv', 'submission.csv')""")
 
-slug = "casmi26-jc-onp-eval-vis" if args.visible else f"casmi26-jc-onp-eval-d{args.draw}"
+slug = "casmi26-jc-onp-eval-vis" if args.visible else f"casmi26-jc-onp-eval{'-' + args.tag if args.tag else ''}-d{args.draw}"
 if args.visible:
     cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": """
 # onp-eval --visible: recover the visible test's answers from train.parquet (its rows are train-derived)
