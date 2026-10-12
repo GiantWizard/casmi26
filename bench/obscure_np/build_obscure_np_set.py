@@ -74,7 +74,9 @@ def ce_array(raw: str, nce: bool, precursor_mz: float) -> np.ndarray:
     NCE uses the usual Thermo approximation eV = NCE * m/z / 500. Unparseable -> empty array,
     which the kernels already treat as "no CE".
     """
-    vals = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", raw or "")]
+    if not isinstance(raw, str):  # pandas 3 keeps NaN through astype(str)
+        return np.zeros(0)
+    vals = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", raw)]
     if nce and np.isfinite(precursor_mz):
         vals = [v * precursor_mz / 500.0 for v in vals]
     return np.asarray(vals, dtype=float)
@@ -243,7 +245,7 @@ def main():
     spec["ms2_normalized_intensities"] = spec["ms2_intensities"].map(
         lambda a: a / a.max() if len(a) and a.max() > 0 else a)
     spec["base_peak_intensity"] = spec["ms2_intensities"].map(lambda a: float(a.max()) if len(a) else np.nan)
-    spec["collision_energy_orig"] = spec["collision_energy_raw"].astype(str)
+    spec["collision_energy_orig"] = spec["collision_energy_raw"].map(lambda v: v if isinstance(v, str) else "")
     is_nce = spec["collision_energy_orig"].str.contains("%|nce|hcd", case=False)
     spec["collision_energy_orig_units"] = "eV"  # test.parquet is all eV; NCE is converted below
     spec["collision_energy_ev"] = [

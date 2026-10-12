@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -41,14 +42,34 @@ def scorer_key(smiles: str | None) -> str | None:
         return None
 
 
+KEY_CACHE = os.environ.get("ONP_KEY_CACHE")  # dir; reruns skip the slow canonicalisation
+
+
 def keys_parallel(smiles, fn, processes=None) -> dict:
-    """{smiles: fn(smiles)} over unique SMILES using all cores (tautomer canonicalisation is slow)."""
+    """{smiles: fn(smiles)} over unique SMILES using all cores (tautomer canonicalisation is slow).
+
+    With ONP_KEY_CACHE set, results persist per function across runs.
+    """
     import multiprocessing as mp
+    import pickle
     uniq = list(dict.fromkeys(s for s in smiles if isinstance(s, str)))
-    if len(uniq) < 2000:
-        return {s: fn(s) for s in uniq}
-    with mp.Pool(processes) as pool:
-        return dict(zip(uniq, pool.map(fn, uniq, chunksize=500)))
+    cache, cpath = {}, None
+    if KEY_CACHE:
+        os.makedirs(KEY_CACHE, exist_ok=True)
+        cpath = os.path.join(KEY_CACHE, f"{fn.__name__}.pkl")
+        if os.path.exists(cpath):
+            cache = pickle.load(open(cpath, "rb"))
+    todo = [s for s in uniq if s not in cache]
+    if len(todo) < 2000:
+        new = {s: fn(s) for s in todo}
+    else:
+        with mp.Pool(processes) as pool:
+            new = dict(zip(todo, pool.map(fn, todo, chunksize=500)))
+    if cpath and new:
+        cache.update(new)
+        pickle.dump(cache, open(cpath + ".tmp", "wb"))
+        os.replace(cpath + ".tmp", cpath)
+    return {s: (new[s] if s in new else cache[s]) for s in uniq}
 
 
 def parent_key(smiles: str | None) -> str | None:
