@@ -68,6 +68,11 @@ if args.visible:  # force the full (non-smoke) path on the visible test
                       "IS_RERUN = True   # onp-eval --visible: full run on the train-derived visible test")
     put(4, c4)
 
+# ---- cell 8: PubChem channel uses every core (hard-coded 4 = Kaggle's count; Colab L4/A100 have more) ----
+c8 = S(8)
+c8 = must_replace(c8, "'/kaggle/working/pc_lists.json', '4']", "'/kaggle/working/pc_lists.json', str(os.cpu_count() or 4)]")
+put(8, c8)
+
 # ---- cell 19: run the final fusion per variant ------------------------------------------
 c19 = S(19)
 c19 = must_replace(c19, """n_glft = 0
