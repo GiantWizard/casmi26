@@ -2,7 +2,7 @@
 status: active
 area: portfolio
 tags: [casmi26, kaggle, handoff]
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # CASMI 2026 handoff
@@ -28,6 +28,8 @@ Full research report: [[CASMI 2026 approach deep dive]] (in `reports/`), notes i
 
 ## Next step
 Build an honest "obscure natural product" test set from public library releases newer than train.parquet (host-approved GNPS/MassBank/MoNA, Enveda-180 Zenodo extra 816 structures), filtered to NP structures absent from train.parquet, so every model in the pipeline is unseen. Then re-test levers there (contrastive GLACIER fine-tune, conditional popularity weight, fusion weights).
+
+Status 2026-10-12: builder + scorer written and smoke-tested on synthetic data, not yet run on real data (cloud session has no Kaggle/data access). See `bench/obscure_np/README.md`. Todo on Mac: download sources, build, upload as `casmi26-jc-onp`, run jc-base2/jc-c/jc-c2 on draws 0-4, check order reproduces LB.
 
 ## Where things are
 - Local (Mac only): `~/casmi26/` (data, scripts in `rk/`, `bench/`, `tune/`, `ft/`, notebooks in `kernels/`, Colab notebooks in `colab/`).
