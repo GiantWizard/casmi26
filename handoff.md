@@ -37,6 +37,13 @@ Status 2026-10-12: obscure-NP set built and uploaded as private dataset `giantwi
 - c2fix (shell dicts dropped, fine-tune actually applied to 26/27 uncovered molecules): +0.0002 overall (λ=1), +0.0004 (λ=0.5), −0.0018 (λ=2); on the 27 uncovered molecules +0.003/+0.007/−0.026, top-1 fixed 1 / broke 0 at λ≤1. All inside noise; only 27 molecules carry the signal.
 - `bench/obscure_np/replay_rerank.py` replays cell 19 offline from a run's saved scores (reproduces Kaggle sub_*.csv exactly), so rerank-only ideas need no GPU.
 
+## PubChem gate lever (2026-10-12) -> candidate `casmi26-jc-gate`
+- Cell 17 skips the PubChem merge when lib_max >= 0.9. On unseen NPs it fired 330/400 (analog/isomer library hits), so 32 molecules whose truth was in the PubChem list (median rank 1) lost it. 44/337 out-of-pool truths are in the PubChem tier; the channel finds 36 and ranks 21 first, but only 4 reached the final top 25.
+- Gentle gate (interleave PubChem at slots 4,8,12,16,20 when lib_max >= 0.9, no promotion): ONP draw 0 +0.011 (CI +0.007..+0.015); visible test (train-derived, class-1-like, gated 400/400) +0.002 (noise). Ships as jc-gate (= jc-c2fix + this).
+- Confidence promotion of the PubChem top-1 after fusion (S > 3.9): +0.031 on ONP but **-0.195 on the visible test** (broke 158 correct rank-1s). Dead. The old rel>250 trigger is also net-negative on ONP.
+- jc-c also loses on the visible test (-0.0085, significant), consistent with its LB drop.
+- Not yet tested: other ONP draws (spectra resampling), how often lib_max >= 0.9 fires on the timsTOF hidden test.
+
 ## Where things are
 - Local (Mac only): `~/casmi26/` (data, scripts in `rk/`, `bench/`, `tune/`, `ft/`, notebooks in `kernels/`, Colab notebooks in `colab/`).
 - Kaggle private datasets: `giantwizard/casmi26-jc-{bench,tims,mix,ftcode,glacier-ft,rk,rkrows,diag}`; fine-tuned weights `glacier_mix.pt`, `glacier_tims.pt` in `casmi26-jc-glacier-ft`.
