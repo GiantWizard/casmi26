@@ -45,10 +45,12 @@ def rerank(df, model, mode):
 
 
 def mrr(sub, df):
+    """Mean over every molecule in df (a molecule missing from sub scores 0)."""
     truth = df[df.label == 1].groupby("molecule_id").smiles.first()
+    lists = dict(sub.values)
     rr = []
-    for mid, s in sub.values:
-        lst = s.split(";")
+    for mid in df.molecule_id.unique():
+        lst = lists.get(mid, "").split(";")
         t = truth.get(mid)
         rr.append(1.0 / (lst.index(t) + 1) if t in lst else 0.0)
     return float(np.mean(rr))
@@ -67,7 +69,7 @@ if __name__ == "__main__":
     base = te.sort_values("fused_rank").groupby("molecule_id").smiles.apply(lambda s: ";".join(s[:25])).reset_index()
     print(f"fused-order proxy MRR (before any simulator rerank): {mrr(base, te):.4f}")
     if a.folds:
-        mids = te.molecule_id.unique()
+        mids = np.array(sorted(map(str, te.molecule_id.unique())), dtype=object)
         rng = np.random.default_rng(26); rng.shuffle(mids)
         parts = {m: i % a.folds for i, m in enumerate(mids)}
         te["fold"] = te.molecule_id.map(parts)
