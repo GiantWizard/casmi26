@@ -39,6 +39,8 @@ GLMIX_SCORES = load("glmix_work/gl_out.json")
 # overridable for sweeps: ONP_ALPHA=0.8 ONP_KRR=5 ... python replay_rerank.py ...
 ICE_LAM = float(os.environ.get("ONP_ICE_LAM", 1.0))
 GL_LAM = float(os.environ.get("ONP_GL_LAM", 1.0))
+# conditional GLACIER weight: used instead of GL_LAM when the main list's and engine 2's top picks agree
+GL_AGREE = os.environ.get("ONP_GL_AGREE")
 GLFT_LAM = 1.0
 ALPHA = float(os.environ.get("ONP_ALPHA", 0.6))
 KRR = float(os.environ.get("ONP_KRR", 3.0))
@@ -95,9 +97,12 @@ def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_
                                     (ice if (CELL19_ICE or not gl_of(mid)) else {}), lam=ICE_LAM, top_n=len(fsm))
                 _g = gl_of(mid)
                 if _g:
+                    gl_w = GL_LAM
+                    if GL_AGREE is not None and vs and e["keys"] and (chem.score_key(vs[0]) or vs[0]) == e["keys"][0]:
+                        gl_w = float(GL_AGREE)
                     o = gl_fuse.rerank_multi(fsm, fk, fsc, [_form2(x) for x in fsm],
                                              [(ice if CELL19_ICE else {}), _g, (glmix_of(mid) if glmix_lam > 0 else {})],
-                                             [ICE_LAM, GL_LAM, glmix_lam], top_n=len(fsm))
+                                             [ICE_LAM, gl_w, glmix_lam], top_n=len(fsm))
                 fsm = [fsm[i] for i in o]
             elif use_glft and glft_of(mid):
                 o = ice_fuse.rerank(fsm, fk, fsc, [_form2(x) for x in fsm], glft_of(mid), lam=glft_lam, top_n=len(fsm))
@@ -129,6 +134,8 @@ if GRID:
     for combo in itertools.product(*axes.values()):
         cfg = dict(zip(axes, combo))
         ALPHA, KRR, GL_LAM = cfg.get("alpha", ALPHA), cfg.get("krr", KRR), cfg.get("gl", GL_LAM)
+        if "agree" in cfg:
+            GL_AGREE = cfg["agree"]
         tag = "_".join(f"{k}{v:g}" for k, v in cfg.items())
         df, _ = run_variant(**base_kw)
         df.to_csv(os.path.join(args.out, f"grid_{base_name}_{tag}.csv"), index=False)
