@@ -91,7 +91,7 @@ print('jobs:', [j['name'] for j in jobs], '| already done:', sorted(done), '| to
 # 3. Python 3.13 environment (the pipeline's pinned RDKit wheels are cp313, as on Kaggle)
 if not os.path.exists('/content/py313/bin/python'):
     sh('pip install -q uv')
-    sh('uv python install 3.13 && uv venv /content/py313 --python 3.13')
+    sh('uv python install 3.13 && uv venv --seed /content/py313 --python 3.13')
     PY = '/content/py313/bin/python'
     sh(f'uv pip install --python {PY} -q torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128', check=False)
     sh(f'uv pip install --python {PY} -q "torch>=2.6"', check=False)
@@ -99,6 +99,9 @@ if not os.path.exists('/content/py313/bin/python'):
        f'networkx matplotlib ipykernel papermill')
     sh(f'{PY} -m ipykernel install --user --name py313 --display-name py313')
 PY = '/content/py313/bin/python'
+# the pipeline pip-installs its pinned RDKit wheels into this interpreter, so it needs pip
+sh(f'uv pip install --python {PY} -q pip')
+sh(f'{PY} -m pip --version')
 sh(f'{PY} -c "import sys, torch; print(sys.version); print(torch.__version__, torch.cuda.is_available())"')
 """),
     code(r"""
