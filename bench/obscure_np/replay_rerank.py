@@ -17,6 +17,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--run", required=True, help="kernel output dir (eng_lists.json, *_work/, v4_submission.csv)")
 ap.add_argument("--lib", required=True)
 ap.add_argument("--out", required=True)
+ap.add_argument("--v4", nargs="*", default=[], help="name=path: alternative pre-fusion main lists; each is replayed as c2fix")
 args = ap.parse_args()
 sys.path.insert(0, args.lib)
 import fuse as ice_fuse  # noqa: E402
@@ -72,10 +73,10 @@ def fuse2(v_smis, e_smis, e_keys, n=FUSE_N):
     return [smi_of[k] for k in order], order, [sc[k] for k in order]
 
 
-def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM):
+def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_path=None):
     """fix_ice_shell=False reproduces the LB notebooks exactly: ICEBERG's all-None shell dict for molecules it
     cannot score makes `if ice:` true, so the fine-tuned GLACIER branch is never reached."""
-    v4 = pd.read_csv(os.path.join(R, "v4_submission.csv"))
+    v4 = pd.read_csv(v4_path or os.path.join(R, "v4_submission.csv"))
     out, n_glft = [], 0
     for mid, s in zip(v4.molecule_id, v4.smiles):
         vs = [x for x in s.split(";") if x and x != "CCO"]
@@ -111,6 +112,9 @@ VARIANTS = {
     "c2fix_l05": dict(use_glft=True, glmix_lam=0.0, fix_ice_shell=True, glft_lam=0.5),
     "c2fix_l2": dict(use_glft=True, glmix_lam=0.0, fix_ice_shell=True, glft_lam=2.0),
 }
+for spec in args.v4:
+    _n, _, _p = spec.partition("=")
+    VARIANTS[f"v4{_n}"] = dict(use_glft=True, glmix_lam=0.0, fix_ice_shell=True, glft_lam=0.5, v4_path=_p)
 import time  # noqa: E402
 for name, kw in VARIANTS.items():
     t0 = time.time()
