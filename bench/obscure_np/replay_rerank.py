@@ -36,9 +36,13 @@ ICE_SCORES = load("ice_work/ice_out.json")
 GL_SCORES = load("gl_work/gl_out.json")
 GLFT_SCORES = load("glft_work/gl_out.json")
 GLMIX_SCORES = load("glmix_work/gl_out.json")
-ICE_LAM = GL_LAM = 1.0
+# overridable for sweeps: ONP_ALPHA=0.8 ONP_KRR=5 ... python replay_rerank.py ...
+ICE_LAM = float(os.environ.get("ONP_ICE_LAM", 1.0))
+GL_LAM = float(os.environ.get("ONP_GL_LAM", 1.0))
 GLFT_LAM = 1.0
-ALPHA, KRR, FUSE_N = 0.6, 3.0, 80
+ALPHA = float(os.environ.get("ONP_ALPHA", 0.6))
+KRR = float(os.environ.get("ONP_KRR", 3.0))
+FUSE_N = int(os.environ.get("ONP_FUSE_N", 80))
 CELL19_ICE = False
 
 
@@ -104,6 +108,7 @@ def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_
 
 
 os.makedirs(args.out, exist_ok=True)
+ONLY = os.environ.get("ONP_ONLY")  # comma list of variant names to run
 VARIANTS = {
     "base2": dict(use_glft=False, glmix_lam=0.0),
     "c": dict(use_glft=True, glmix_lam=1.0),
@@ -115,7 +120,23 @@ VARIANTS = {
 for spec in args.v4:
     _n, _, _p = spec.partition("=")
     VARIANTS[f"v4{_n}"] = dict(use_glft=True, glmix_lam=0.0, fix_ice_shell=True, glft_lam=0.5, v4_path=_p)
+GRID = os.environ.get("ONP_GRID")  # "alpha=0.3,0.6;krr=1,3;gl=0.5,1": sweep the first --v4 variant in-process
+if GRID:
+    import itertools
+    axes = {k: [float(x) for x in v.split(",")] for k, v in (p.split("=") for p in GRID.split(";"))}
+    base_name = next(k for k in VARIANTS if k.startswith("v4"))
+    base_kw = VARIANTS[base_name]
+    for combo in itertools.product(*axes.values()):
+        cfg = dict(zip(axes, combo))
+        ALPHA, KRR, GL_LAM = cfg.get("alpha", ALPHA), cfg.get("krr", KRR), cfg.get("gl", GL_LAM)
+        tag = "_".join(f"{k}{v:g}" for k, v in cfg.items())
+        df, _ = run_variant(**base_kw)
+        df.to_csv(os.path.join(args.out, f"grid_{base_name}_{tag}.csv"), index=False)
+        print("grid", tag, flush=True)
+    sys.exit(0)
 import time  # noqa: E402
+if ONLY:
+    VARIANTS = {k: v for k, v in VARIANTS.items() if k in ONLY.split(",")}
 for name, kw in VARIANTS.items():
     t0 = time.time()
     df, n = run_variant(**kw)
