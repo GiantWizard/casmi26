@@ -11,7 +11,17 @@ Branch `claude/eager-einstein-jn21vy` of `giantwizard/casmi26` has everything be
 ephemeral cloud container: scratch data (downloaded libraries, run outputs, key caches) is gone; anything needed
 again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuildable with the scripts listed.
 
-## Bottom line
+## Leaderboard outcome (added 2026-10-13)
+
+- `jc-gate` 0.438 (no change). **`jc-lr2` 0.410 (-0.028): the learned rerank hurts on the hidden test.**
+- Set B (447 unseen NPs, never trained on) explains it: rerank all +0.050, but **in-pool -0.013 (3 fixed / 5 broke)**;
+  set A in-pool was 5 / 5. The whole offline gain came from out-of-pool molecules whose answer only PubChem had
+  (84-89% of the ONP sets, mostly Orbitrap). The hidden test is mostly the in-pool regime on timsTOF, which no
+  offline set covered (the visible test is class 1). Gate on set B: +0.010 overall but -0.004 in-pool.
+- Lesson: no candidate ships without an offline set that matches the hidden test's dominant regime
+  (timsTOF, answer in pool, no library hit). Do not use jc-lr2 as a final pick; picks for now: jc-base2 / jc-gate.
+
+## Bottom line (as written before the LB result)
 
 - Best public score still 0.438. `jc-c2fix` was submitted and scored 0.438 (expected: its fix touches ~7% of molecules).
 - **Ready to submit: `giantwizard/casmi26-jc-lr2` version 1** (commit run done, log confirms the learned rerank ran on
