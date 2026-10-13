@@ -21,7 +21,7 @@ again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuilda
 - Lesson: no candidate ships without an offline set that matches the hidden test's dominant regime
   (timsTOF, answer in pool, no library hit). Do not use jc-lr2 as a final pick; picks for now: jc-base2 / jc-gate.
 
-## In-pool timsTOF eval set (added 2026-10-13, results pending)
+## In-pool timsTOF eval set (added 2026-10-13)
 
 - Built by `bench/obscure_np/build_inpool_set.py` -> Kaggle `giantwizard/casmi26-jc-inpool`: 400 random train timsTOF
   molecules (MassSpecGym excluded), 2 draws, visible-test-shaped (~3 spectra/mol, mostly [M+H]+/[M-H]-). The visible
@@ -36,6 +36,12 @@ again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuilda
   (validated: reproduces set B exactly). Compare rp_* columns to each other; final_base2 includes the cell-22 audit
   pass that the replay omits (+0.004 on B).
 - Decision rule: retrain the reranker on A + B + visible + in-pool; ship only if in-pool is neutral or better.
+- **Result, draw 0 (Colab, 6,452 s on L4): base MRR 0.988 (98% top-1). The leak dominates: the set is saturated.**
+  vs base2: c -0.007 (1 fixed / 5 broke, LOSS; LB also lost: 0.414), c2fix -0.002, gentle gate -0.002, **jc-lr2 +0.001
+  (4 fixed / 4 broke, noise) although it lost 0.028 on the LB**. So it does NOT detect jc-lr2's harm; with a near-perfect
+  base there is nothing to break that the memorised models don't re-find. Not worth more GPU (draw 1 not run).
+- Colab state 2026-10-13 22:25 UTC: done inpool-d0, b-d0, d2; not run: inpool-d1, b-d0-xlib, d2-xlib, b-d1 (its
+  error entry is stale from the old runner). The extra-library jobs never ran.
 
 ## Bottom line (as written before the LB result)
 
