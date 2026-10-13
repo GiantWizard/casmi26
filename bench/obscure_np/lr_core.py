@@ -13,6 +13,9 @@ FEATS = ["fused", "fused_rank", "r_main", "r_eng", "r_pc", "pop", "agree", "n_ca
          "ice_z", "gl_z", "glft_z", "ice_grank", "gl_grank", "glft_grank", "grp_size", "grp_rank",
          "fused_minus_max", "pop_minus_max", "is_top_group"]
 SIMS = ("ice", "gl", "glft")
+# optional FIORA forward-model score (kernels/fiora_runner.py); FEATS stays the jc-lr2 feature set
+SIMS_F = SIMS + ("fiora",)
+FEATS_F = FEATS + ["fiora", "fiora_cov", "fiora_minus_max", "fiora_z", "fiora_grank"]
 
 
 def _num(v):
@@ -23,7 +26,7 @@ def _num(v):
         return np.nan
 
 
-def molecule_rows(mid, main_smis, main_keys, eng_keys, pcl, fsm, fk, fsc, forms, sims, pop):
+def molecule_rows(mid, main_smis, main_keys, eng_keys, pcl, fsm, fk, fsc, forms, sims, pop, names=SIMS):
     """Rows for one molecule. main_keys: skey of each main-list SMILES; pcl: PubChem-channel dict for the molecule;
     fsm/fk/fsc: fused SMILES/keys/scores in fused order; forms: formula per fused SMILES;
     sims: {'ice'|'gl'|'glft': {smiles_or_key: score}} for this molecule; pop: key -> popularity."""
@@ -36,7 +39,7 @@ def molecule_rows(mid, main_smis, main_keys, eng_keys, pcl, fsm, fk, fsc, forms,
         r = dict(molecule_id=mid, smiles=smi, key=k, fused=f, fused_rank=i + 1, form=form,
                  r_main=vrank.get(k, 99), r_eng=erank.get(k, 99), r_pc=prank.get(k, 99),
                  pop=pop.get(k, np.nan), agree=agree, n_cand=len(fsm), pc_S=_num((pcl or {}).get("S")))
-        for name in SIMS:
+        for name in names:
             d = sims.get(name) or {}
             v = d.get(smi)
             if v is None:
@@ -46,12 +49,12 @@ def molecule_rows(mid, main_smis, main_keys, eng_keys, pcl, fsm, fk, fsc, forms,
     return rows
 
 
-def add_group_feats(df):
+def add_group_feats(df, names=SIMS):
     g = df.groupby(["molecule_id", "form"])
     df["grp_size"] = g.smiles.transform("size")
     df["grp_rank"] = g.fused_rank.rank(method="first")
     df["fused_minus_max"] = df.fused - g.fused.transform("max")
-    for name in SIMS:
+    for name in names:
         df[f"{name}_cov"] = df[name].notna().astype(int)
         mx, mu, sd = g[name].transform("max"), g[name].transform("mean"), g[name].transform("std")
         df[f"{name}_minus_max"] = df[name] - mx

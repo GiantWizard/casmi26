@@ -23,6 +23,7 @@ ap.add_argument("--main", required=True, help="pre-fusion main list (v4), e.g. t
 ap.add_argument("--lib", required=True, help="dir with fuse.py, gl_fuse.py, casmi/chem.py")
 ap.add_argument("--pool-pop", required=True, help="parquet: scorer_key, popularity")
 ap.add_argument("--solution", help="adds label column (candidate is the truth)")
+ap.add_argument("--fiora", help="fiora_out.json from kernels/fiora_runner.py (adds FIORA features)")
 ap.add_argument("--out", required=True)
 a = ap.parse_args()
 sys.path.insert(0, a.lib)
@@ -40,6 +41,8 @@ load = lambda p: json.load(open(os.path.join(R, p))) if os.path.exists(os.path.j
 ENG = load("eng_lists.json")
 PC = load("pc_lists.json")
 SC = {"ice": load("ice_work/ice_out.json"), "gl": load("gl_work/gl_out.json"), "glft": load("glft_work/gl_out.json")}
+if a.fiora:
+    SC["fiora"] = json.load(open(a.fiora))
 POP = pd.read_parquet(a.pool_pop).groupby("scorer_key").popularity.max().to_dict()
 main = pd.read_csv(a.main)
 
