@@ -43,6 +43,20 @@ again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuilda
 - Colab state 2026-10-13 22:25 UTC: done inpool-d0, b-d0, d2; not run: inpool-d1, b-d0-xlib, d2-xlib, b-d1 (its
   error entry is stale from the old runner). The extra-library jobs never ran.
 
+## Where the points are (CPU-only analysis, 2026-10-13 late)
+
+- Forum facts (research_notes/.../competition_forum_and_notebooks.md): the visible test.parquet is a dummy of
+  Enveda-180 (synthetic) rows copied from train, so neither it nor the in-pool set describes the hidden test. Hidden
+  test = ~400 unpublished NP/analog molecules; LB-probed class mix ~16% library / 45% in PubChem or COCONUT / 39% novel
+  (absent from both, D741597, D742274). Our 0.438 implies roughly class-2 MRR ~0.6 and class 3 ~0.
+- Extra library is a weak lead: the 816 missing Enveda-180 structures are synthetic and were "filtered out" (host).
+- Non-leaky in-pool ONP molecules (set A d0/d1, B d0; `probes/ppm_probe.py`): MRR 0.71-0.74, truth missing 2-8%, at
+  rank 2-25 in 30-44%; nearly all of those share #1's formula (14 wrong-formula cases in total across A0+B0, so a
+  tighter ppm gate is worth ~nothing). The lever is the same-formula isomer race, which is also what jc-lr2 tried
+  and lost on the LB; the forum reports seven separators at ~0 to +0.004.
+- Metric audit cell: tails are deduplicated/validated, so nothing leaks there (the "ranks 2-25 lower the score"
+  forum report looks like noise).
+
 ## Bottom line (as written before the LB result)
 
 - Best public score still 0.438. `jc-c2fix` was submitted and scored 0.438 (expected: its fix touches ~7% of molecules).
