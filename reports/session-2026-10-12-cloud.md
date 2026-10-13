@@ -21,6 +21,22 @@ again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuilda
 - Lesson: no candidate ships without an offline set that matches the hidden test's dominant regime
   (timsTOF, answer in pool, no library hit). Do not use jc-lr2 as a final pick; picks for now: jc-base2 / jc-gate.
 
+## In-pool timsTOF eval set (added 2026-10-13, results pending)
+
+- Built by `bench/obscure_np/build_inpool_set.py` -> Kaggle `giantwizard/casmi26-jc-inpool`: 400 random train timsTOF
+  molecules (MassSpecGym excluded), 2 draws, visible-test-shaped (~3 spectra/mol, mostly [M+H]+/[M-H]-). The visible
+  test's answers are 100% train-only structures (pool src 1), and so are these.
+- Eval notebooks `kernels/jc-inpool-eval-d0/-d1` (`make_inpool_eval.py`): train.parquet minus the held-out structures'
+  rows for both engines (no library hit); engine 2's pool gets the structures back (engine 1's pool_meta keeps them).
+- External timsTOF data can't build this: 0 of the 1,679 Enveda-180 structures absent from train are in the pool.
+- Leak: FPNet, engine-2 fp models, engine rankers and fine-tuned GLACIER trained on these spectra (GLACIER-ft labels
+  cover ~all timsTOF train structures). So it is a HARM detector: a lever that loses here breaks answers the base finds.
+- Colab jobs reordered: in-pool d0, d1 first (the runner reads jobs.json once at start, so it needs a fresh Run all).
+- Score a finished run: `bash bench/obscure_np/score_run.sh RUN SOLUTION TEST_DRAW REPLAY_LIB POOL_POP LR_MODEL OUT`
+  (validated: reproduces set B exactly). Compare rp_* columns to each other; final_base2 includes the cell-22 audit
+  pass that the replay omits (+0.004 on B).
+- Decision rule: retrain the reranker on A + B + visible + in-pool; ship only if in-pool is neutral or better.
+
 ## Bottom line (as written before the LB result)
 
 - Best public score still 0.438. `jc-c2fix` was submitted and scored 0.438 (expected: its fix touches ~7% of molecules).
