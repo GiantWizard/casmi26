@@ -12,6 +12,11 @@ the panel out; CPU replay with bench/obscure_np/probes/engine1_panel/*):
   answer removed from the pool, no reference spectra (class-3-like): engine-1 MRR 0.361 -> 0.430
       (+0.070, 90% CI +0.047..+0.096; 31 molecules better, 0 worse)
   answer in the pool, no reference spectra (class 2): 0.971 -> 0.970 (-0.0004; 2 molecules one rank lower)
+  library hit in other libraries (class 1): 0.954 -> 0.951 (-0.003; 1 molecule)
+Promotion guard (cell 17): skip the PubChem promotion when engine 1's top entry is generated with ranker score >= 3.
+On the panel it holds for 41 / 250 class-3-like molecules, all with the answer at rank 1, and for 0 in the class-1 /
+class-2 scenarios; cell-17 replay: class 3 0.408 -> 0.422, class 2 with the answer only in PubChem unchanged (0.757).
+The same condition pins that entry at rank 1 after the cell-19 fusion + simulator rerank.
 
     python kernels/make_gen_notebook.py [--src jc-gate] [--out jc-gen]
 """
@@ -44,6 +49,8 @@ s = must_replace(s, "BASE, n_err = {}, 0\n", f"""BASE, n_err = {{}}, 0
 GEN_WIDE = {WIDE!r}
 GEN_DEFAULT = {{k: getattr(E.cfg, k) for k in GEN_WIDE}}
 n_gen2, n_gen2_ins, n_gen2_err = 0, 0, 0
+GEN_TOP_SCORE = {{}}     # raw ranker score of the top entry when it is a generated structure (promotion guard, cell 17)
+GEN_GUARD_TAU = 3.0
 
 
 def gen2_combine(base, wide, n):
@@ -89,11 +96,36 @@ s = must_replace(s, """                    if len(smis) >= TOPN: break
                     n_gen2_err += 1; print('jc-gen second pass failed', mid, repr(e2))
                 finally:
                     for _k, _v in GEN_DEFAULT.items(): setattr(E.cfg, _k, _v)
+                if pids_ and pids_[0] < 0:
+                    GEN_TOP_SCORE[str(mid)] = float(scs[0])
         except Exception as e:""")
 s = must_replace(s, "print('errors', n_err, '| popularity re-ranked lists', n_pp)",
                  "print('errors', n_err, '| popularity re-ranked lists', n_pp)\n"
                  "print('jc-gen: wide pass on', n_gen2, 'molecules,', n_gen2_ins, 'generated structures inserted,', n_gen2_err, 'failures')")
 cells[i13]["source"] = s
+
+# cell 19: the same confident generated top entry keeps rank 1 through the two-engine fusion and the simulator rerank
+# (engine 2 never proposes generated structures, so RRF lets any main-list #2 inside engine 2's top 8 overtake it)
+i19 = next(i for i, c in enumerate(cells) if c["cell_type"] == "code" and "fsm, fk, fsc = fuse2(" in "".join(c["source"]))
+s19 = "".join(cells[i19]["source"])
+s19 = must_replace(s19, "n_glft = 0\nFUSION_OVERFLOW = {}", "n_glft = 0\nn_gen_pin = 0\nFUSION_OVERFLOW = {}")
+s19 = must_replace(s19, "            changed += int(bool(vs) and fsm[:1] != vs[:1])\n",
+                   "            if GEN_TOP_SCORE.get(str(mid), -1e9) >= GEN_GUARD_TAU and vs and vs[0] in fsm and fsm[0] != vs[0]:\n"
+                   "                fsm = [vs[0]] + [x for x in fsm if x != vs[0]]; n_gen_pin += 1   # jc-gen pin\n"
+                   "            changed += int(bool(vs) and fsm[:1] != vs[:1])\n")
+s19 = must_replace(s19, "    print('jc-c: fine-tuned GLACIER rerank applied to', n_glft, 'molecules ICEBERG and GLACIER cannot score')",
+                   "    print('jc-c: fine-tuned GLACIER rerank applied to', n_glft, 'molecules ICEBERG and GLACIER cannot score')\n"
+                   "    print('jc-gen: confident generated top entry pinned at rank 1 for', n_gen_pin, 'molecules')")
+cells[i19]["source"] = s19
+
+# cell 17: a confident generated top entry is not displaced by the PubChem promotion (class 3 is absent from PubChem)
+i17 = next(i for i, c in enumerate(cells) if c["cell_type"] == "code" and "def promote(" in "".join(c["source"]))
+s17 = "".join(cells[i17]["source"])
+s17 = must_replace(s17, "        if (S is not None and float(S) > S_TAU and pop_top >= POP_TAU) or (rel > 250.0):",
+                   "        _guard = GEN_TOP_SCORE.get(str(mid), -1e9) >= GEN_GUARD_TAU    # jc-gen promotion guard\n"
+                   "        if _guard:\n            stats['gen_guard'] = stats.get('gen_guard', 0) + 1\n"
+                   "        if not _guard and ((S is not None and float(S) > S_TAU and pop_top >= POP_TAU) or (rel > 250.0)):")
+cells[i17]["source"] = s17
 
 # self-test of the combine rule in the cheap pass, right after cell 13's definitions are available
 cells[0]["source"] = ("# jc-gen = jc-gate + second engine-1 pass with wider class-3 generation "
