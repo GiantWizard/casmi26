@@ -43,6 +43,40 @@ again is either in this repo, on Kaggle (datasets / kernel outputs), or rebuilda
 - Colab state 2026-10-13 22:25 UTC: done inpool-d0, b-d0, d2; not run: inpool-d1, b-d0-xlib, d2-xlib, b-d1 (its
   error entry is stale from the old runner). The extra-library jobs never ran.
 
+## LEAD: wider class-3 generation, inserted into the shipped engine-1 list (`jc-gen`, 2026-10-14, CPU-validated)
+
+Harness: `bench/obscure_np/probes/engine1_panel/` runs the public engine 1 (v4b, FPNet A which held the panel out) on
+the Enveda NP panel (250 timsTOF natural products, the hidden test's chemistry) on CPU, ~3 s/molecule.
+
+- Engine 1's generator (derivatives of library analogs) is starved: max 6 parents, 60/150 products, median 7 generated
+  candidates per molecule. With the answer removed from the pool (only generation can find it) reach is 39.6%, and
+  when reached it ranks first 86% of the time: reach is the bottleneck.
+- Wide settings (gen_n_analog 20, gen_min_sim 0.2, gen_max_per_parent 200, gen_max_total 600): reach 39.6% -> ~50%.
+  Ranking the wide run directly hurts other molecules through the ranker's list-context features (class 1 -0.049,
+  class 2 -0.006), so `jc-gen` keeps the shipped list and inserts only wide-pass-new generated structures at their
+  wide positions:
+
+| Panel scenario | default | jc-gen | delta (90% CI) | better / worse |
+|---|---|---|---|---|
+| class 1 (NP spectra hidden, other libraries kept) | 0.954 | 0.951 | -0.003 (-0.009, 0) | 0 / 1 |
+| class 2 (all reference spectra hidden, in pool) | 0.971 | 0.970 | -0.0004 (-0.0008, 0) | 0 / 2 |
+| class-3-like (also removed from the pool) | 0.361 | 0.430 | **+0.070 (+0.047, +0.096)** | **31 / 0** |
+
+  Cell-17 merge replay with the answer also absent from PubChem: 0.347 -> 0.399 (the promotion rule costs a few
+  generated rank-1 hits either way; a follow-up could skip promotion when engine 1's top is a confident generated hit).
+- Expected LB with the forum class mix (16/45/39): +0.027 if the panel's class-3 gain transfers, ~+0.009 if generation
+  on truly novel chemistry is ~3x weaker than on famous NPs (forum warning). Runtime: second engine-1 pass, ~+3-6 s CPU
+  per molecule (+20-40 min on the hidden rerun).
+- Checked: in-place EngineCfg switching reproduces the saved wide run exactly and restores defaults
+  (`cfgtest` in the session); `gen2_combine` unit-tested in `make_gen_notebook.py`'s output.
+- Ready: `kernels/jc-gen` (from jc-gate; `python kernels/make_gen_notebook.py`). Not pushed or run on Kaggle (no GPU
+  work this session). First submission after the quota reset.
+
+Other things ruled out tonight: FPNet/ranker over-trust (panel FPNet A/B/D all honest at ~0.42-0.44 top-1; the
+ranker's lift is library negative evidence + analogs, legitimate); test-set analog propagation (+0.011 on honest FP
+base, ~0 with popularity); Enveda-180 as class-3 chemistry (94% of it is in PubChem); ONP sets are 80% synthetic
+amino-acid conjugates outside the pool (why their gains never transferred).
+
 ## Where the points are (CPU-only analysis, 2026-10-13 late)
 
 - Forum facts (research_notes/.../competition_forum_and_notebooks.md): the visible test.parquet is a dummy of
