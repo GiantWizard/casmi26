@@ -44,6 +44,12 @@ are ready to push after the reset.
   gets at least one badly wrong. It is too small (n 61) to resolve +/-0.003 effects (e2rank2 replica disagrees in
   sign at 1 vs 4 molecules). Use it as a harm filter for large changes, not to rank small tweaks.
 - The out-of-pool slices are consistently optimistic: gains there do not reach the LB.
+- Set A draw 2 (non-conj in-pool n 40; lr2 excluded because it trained on set A): c **-0.056** (2 / 6), gate +0.023
+  (4 / 1), e2rank2 +0.013 (1 / 1), netgen **-0.007** (1 / 5). Across A + B (~100 molecules) the proxy flags c's harm
+  clearly, puts gate and e2rank2 near zero, and predicts netgen slightly negative on both sets.
+- LB experiments prepared for the quota reset (`kernels/make_v7c_variants.py`): `jc-v7c-popx0p5` and `jc-v7c-popx2`
+  (both popularity weights x0.5 / x2 on the 0.443 notebook). Popularity is the one knob no library-molecule proxy can
+  judge, and the hidden test's class-2 answers have no public spectra.
 
 ## Network-guided analog generation (`bench/netgen/`)
 
