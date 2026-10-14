@@ -45,7 +45,22 @@ GLFT_LAM = 1.0
 ALPHA = float(os.environ.get("ONP_ALPHA", 0.6))
 KRR = float(os.environ.get("ONP_KRR", 3.0))
 FUSE_N = int(os.environ.get("ONP_FUSE_N", 80))
-CELL19_ICE = False
+CELL19_ICE = os.environ.get("ONP_CELL19_ICE", "0") == "1"
+# extra same-formula re-scorers: ONP_EXTRA="mist=/path/mist_out.json:0.5,other=...:1" (score dicts like gl_out.json).
+# Added as further rerank_multi terms where GLACIER scores the molecule; elsewhere applied on their own
+# (ONP_EXTRA_SOLO=0 turns that off).
+EXTRA = []
+for _spec in filter(None, os.environ.get("ONP_EXTRA", "").split(",")):
+    _nm, _, _rest = _spec.partition("=")
+    _path, _, _lam = _rest.rpartition(":")
+    EXTRA.append((_nm, json.load(open(_path)), float(_lam)))
+EXTRA_SOLO = os.environ.get("ONP_EXTRA_SOLO", "1") != "0"
+FULL = os.environ.get("ONP_FULL", "0") == "1"   # write the whole fused list (FUSE_N), not just the top 25
+# third candidate list fused by weighted RRF: ONP_LIST3="/path/fp3.json:0.4" ({mid: {smiles: [...]}})
+LIST3, ALPHA3 = {}, 0.0
+if os.environ.get("ONP_LIST3"):
+    _p, _, _w = os.environ["ONP_LIST3"].rpartition(":")
+    LIST3, ALPHA3 = json.load(open(_p)), float(_w)
 
 
 @functools.lru_cache(maxsize=None)
@@ -66,7 +81,7 @@ glft_of = lambda m: _nonempty(GLFT_SCORES, m)
 glmix_of = lambda m: _nonempty(GLMIX_SCORES, m)
 
 
-def fuse2(v_smis, e_smis, e_keys, n=FUSE_N):
+def fuse2(v_smis, e_smis, e_keys, n=FUSE_N, l3=None):
     sc, smi_of = {}, {}
     for r, s in enumerate(v_smis, 1):
         k = chem.score_key(s) or s
@@ -75,8 +90,24 @@ def fuse2(v_smis, e_smis, e_keys, n=FUSE_N):
         if not k:
             continue
         sc[k] = sc.get(k, 0.0) + ALPHA / (KRR + r); smi_of.setdefault(k, s)
+    for r, s in enumerate(l3 or [], 1):
+        k = chem.score_key(s) or s
+        sc[k] = sc.get(k, 0.0) + ALPHA3 / (KRR + r); smi_of.setdefault(k, s)
     order = sorted(sc, key=lambda k: -sc[k])[:n]
     return [smi_of[k] for k in order], order, [sc[k] for k in order]
+
+
+def _extra_only(mid, fsm, fk, fsc):
+    """Extra re-scorers alone on a list no forward model reordered. fk/fsc stay aligned with the fused order, so
+    the list is re-fused by key first (the ICE/GLFT branches may have permuted fsm)."""
+    pos = {s: i for i, s in enumerate(fsm)}
+    dicts = [_nonempty(d, mid) for _, d, _ in EXTRA]
+    if not any(dicts):
+        return fsm
+    keys = [chem.score_key(s) or s for s in fsm]
+    sc = [-i for i in range(len(fsm))]            # current order as the base score
+    o = gl_fuse.rerank_multi(fsm, keys, sc, [_form2(x) for x in fsm], dicts, [l for _, _, l in EXTRA], top_n=len(fsm))
+    return [fsm[i] for i in o]
 
 
 def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_path=None):
@@ -88,7 +119,7 @@ def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_
         vs = [x for x in s.split(";") if x and x != "CCO"]
         e = ENG.get(str(mid))
         if e and e["smiles"]:
-            fsm, fk, fsc = fuse2(vs, e["smiles"], e["keys"])
+            fsm, fk, fsc = fuse2(vs, e["smiles"], e["keys"], l3=(LIST3.get(str(mid)) or {}).get("smiles"))
             ice = ICE_SCORES.get(str(mid), {}) if isinstance(ICE_SCORES, dict) else {}
             if fix_ice_shell and not any(v is not None for v in ice.values()):
                 ice = {}
@@ -101,14 +132,19 @@ def run_variant(use_glft, glmix_lam, fix_ice_shell=False, glft_lam=GLFT_LAM, v4_
                     if GL_AGREE is not None and vs and e["keys"] and (chem.score_key(vs[0]) or vs[0]) == e["keys"][0]:
                         gl_w = float(GL_AGREE)
                     o = gl_fuse.rerank_multi(fsm, fk, fsc, [_form2(x) for x in fsm],
-                                             [(ice if CELL19_ICE else {}), _g, (glmix_of(mid) if glmix_lam > 0 else {})],
-                                             [ICE_LAM, gl_w, glmix_lam], top_n=len(fsm))
+                                             [(ice if CELL19_ICE else {}), _g, (glmix_of(mid) if glmix_lam > 0 else {})]
+                                             + [_nonempty(d, mid) for _, d, _ in EXTRA],
+                                             [ICE_LAM, gl_w, glmix_lam] + [l for _, _, l in EXTRA], top_n=len(fsm))
                 fsm = [fsm[i] for i in o]
+                if not _g and EXTRA and EXTRA_SOLO:
+                    fsm = _extra_only(mid, fsm, fk, fsc)
             elif use_glft and glft_of(mid):
                 o = ice_fuse.rerank(fsm, fk, fsc, [_form2(x) for x in fsm], glft_of(mid), lam=glft_lam, top_n=len(fsm))
                 fsm = [fsm[i] for i in o]; n_glft += 1
-            vs = fsm[:25]
-        out.append((mid, ";".join(vs[:25]) if vs else "CCO"))
+            elif EXTRA and EXTRA_SOLO:
+                fsm = _extra_only(mid, fsm, fk, fsc)
+            vs = fsm if FULL else fsm[:25]
+        out.append((mid, ";".join(vs if FULL else vs[:25]) if vs else "CCO"))
     return pd.DataFrame(out, columns=["molecule_id", "smiles"]), n_glft
 
 

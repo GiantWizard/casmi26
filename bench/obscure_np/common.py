@@ -63,7 +63,7 @@ def keys_parallel(smiles, fn, processes=None) -> dict:
     if len(todo) < 2000:
         new = {s: fn(s) for s in todo}
     else:
-        with mp.Pool(processes) as pool:
+        with mp.get_context("fork").Pool(processes) as pool:  # fork: spawn (macOS default) re-runs the calling script
             new = dict(zip(todo, pool.map(fn, todo, chunksize=500)))
     if cpath and new:
         cache.update(new)
