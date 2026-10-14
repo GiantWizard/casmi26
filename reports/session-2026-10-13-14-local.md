@@ -104,4 +104,7 @@ candidate pool is simulated).
 2. After the GPU quota reset: push `jc-v7c-e2r2` (0.443, final-pick candidate); optionally `jc-netgen-probe` to count
    generated hits on the hidden public split.
 3. When the Colab simulation finishes: run the training notebook; gate any new FP model with the non-conj in-pool proxy.
+   For deployment, fine-tune from the engine's own bank (`ahmedberatozer/casmi26-fpnet-full1`) rather than fold0, at a
+   small learning rate, so the v4b ranker's FP features stay close to what it was trained on; swap it in as the
+   engine bank and judge it on the LB (the proxy cannot replay engine 1).
 4. Any new idea: measure on the non-conjugate in-pool slice of sets A and B first; only large effects are resolvable.
