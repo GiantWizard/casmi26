@@ -19,7 +19,7 @@ Mac paths `~/casmi26/...` (data, `fp/run/work` = the casmi spectrum cache from `
 | jc-c | 0.414 | mix GLACIER at full weight |
 | jc-lr2 | 0.410 | learned rerank |
 | jc-gen (cloud session) | 0.431 | generation from pool relatives |
-| jc-netgen (this session) | pending at push time | network-guided analog generation |
+| jc-netgen (this session) | **0.436** | network-guided analog generation (-0.002; proxy predicted -0.005..-0.007 before the score) |
 
 Public notebooks top out at 0.443 (`antriksharya/casmi26-v7c-e2rank2`: engine 2's top-1 at rank 2 when it disagrees
 with the final #1). The 0.445-0.450 crowd are private edits by teams with 100+ entries. Kaggle weekly GPU quota is
@@ -100,7 +100,8 @@ candidate pool is simulated).
 
 ## Next steps
 
-1. Read jc-netgen's LB score; if ~0.438 or below, stop the generation direction (proxy predicted ~-0.005).
+1. jc-netgen scored 0.436 (2026-10-14): stop the generation direction. First LB result predicted in advance by the
+   non-conjugate in-pool proxy.
 2. After the GPU quota reset: push `jc-v7c-e2r2` (0.443, final-pick candidate); optionally `jc-netgen-probe` to count
    generated hits on the hidden public split.
 3. When the Colab simulation finishes: run the training notebook; gate any new FP model with the non-conj in-pool proxy.
