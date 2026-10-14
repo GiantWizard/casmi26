@@ -72,6 +72,12 @@ the Enveda NP panel (250 timsTOF natural products, the hidden test's chemistry) 
 - Ready: `kernels/jc-gen` (from jc-gate; `python kernels/make_gen_notebook.py`). Not pushed or run on Kaggle (no GPU
   work this session). First submission after the quota reset.
 
+**LB result: jc-gen 0.431 (submitted 2026-10-14 14:02), vs jc-gate 0.438.** The panel's class-3-like gain did not
+transfer (predicted +0.009..+0.027; got about -1 public molecule). Either generation from famous-NP relatives overstates
+reach on the hidden test's novel chemistry by far more than 3x, or the post-fusion pin locked in wrong generated picks
+(the one part that could not be measured offline). Do not use jc-gen as a final pick. Fourth offline proxy (ONP A/B,
+in-pool set, NP panel) that failed to predict the LB.
+
 Follow-ups (2026-10-14, same harness):
 - Promotion guard + post-fusion pin (in jc-gen): when engine 1's top entry is generated with raw ranker score >= 3, skip
   the cell-17 PubChem promotion and keep that entry at rank 1 through the cell-19 RRF fusion (any main-list #2 inside
