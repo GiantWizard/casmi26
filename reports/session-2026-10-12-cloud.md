@@ -72,6 +72,22 @@ the Enveda NP panel (250 timsTOF natural products, the hidden test's chemistry) 
 - Ready: `kernels/jc-gen` (from jc-gate; `python kernels/make_gen_notebook.py`). Not pushed or run on Kaggle (no GPU
   work this session). First submission after the quota reset.
 
+Follow-ups (2026-10-14, same harness):
+- Promotion guard + post-fusion pin (in jc-gen): when engine 1's top entry is generated with raw ranker score >= 3, skip
+  the cell-17 PubChem promotion and keep that entry at rank 1 through the cell-19 RRF fusion (any main-list #2 inside
+  engine 2's top 8 otherwise overtakes a generated #1). Condition holds for 41/250 class-3-like panel molecules, all
+  correct, 0 in class 1/2. Cell-17 replay: class 3 0.408 -> 0.422, PubChem-only class 2 unchanged. jc-gen cell 13 was
+  executed against the real engine on CPU (0 errors).
+- Why the generator misses: of 117 answers still missed with wide settings, 89 are derivable with the existing
+  transform table (per-parent cap 30 suffices) from a Tanimoto >= 0.6 pool relative, 72 of which have library
+  spectra. The miss is parent selection: those relatives are mostly not among the 100 spectral analogs.
+  All 100 analogs as parents: small step over wide (40 molecules: reach 0.525 -> 0.550).
+  Structure-guided parents (pool structures with spectra at target - transform shift, ranked by the query's predicted
+  fingerprint, top 30, added to the analog parents): class-3-like 0.443 vs wide 0.430 (+0.013; reach 0.524 -> 0.588,
+  41 better / 1 worse vs default), but ~5x generated candidates, ~5-10x CPU per molecule and steady memory growth;
+  not adopted (class 1/2 safety not measured). Harness option GEN_SG=1 in engine1_panel/panel_dump.py.
+- Transform-compatible parent filter: no-op (two-step combos match almost any mass shift).
+
 Other things ruled out tonight: FPNet/ranker over-trust (panel FPNet A/B/D all honest at ~0.42-0.44 top-1; the
 ranker's lift is library negative evidence + analogs, legitimate); test-set analog propagation (+0.011 on honest FP
 base, ~0 with popularity); Enveda-180 as class-3 chemistry (94% of it is in PubChem); ONP sets are 80% synthetic

@@ -53,7 +53,66 @@ for _k, _v in json.loads(os.environ.get('GEN_CFG', '{}')).items():      # ADDED:
     setattr(_cfg, _k, type(getattr(_cfg, _k))(_v))
 print('EngineCfg', _cfg, flush=True)
 E = Engine(L, P, tfp, _cfg, bank)
+if os.environ.get('GEN_TF'):                       # ADDED: parents restricted to transform-compatible analogs
+    from casmi import derive as _derive
+    _orig_generate = E.generate
+    def _generate_tf(analogs, target, exclude_keys):
+        tol = max(E.cfg.gen_tol_da, target * E.cfg.ppm_win * 1e-6)
+        ok = [a for a in analogs if a[1] >= E.cfg.gen_min_sim
+              and _derive.matching_transforms(target - float(L.struct_mass[a[0]]), tol, 2)]
+        return _orig_generate(ok, target, exclude_keys)
+    E.generate = _generate_tf
+    print('GEN_TF: parents = transform-compatible analogs', flush=True)
 V = v1engine.V1FE(E, [os.path.join(V4, m['file']) for m in MAN['fe_models']], MAN['families'], device=dev)
+if os.environ.get('GEN_SG'):                       # ADDED: structure-guided parents (predicted fingerprint)
+    from casmi import derive as _derive
+    from casmi.engine import merge_spectra as _merge
+    _SG_K = int(os.environ.get('GEN_SG_K', '30'))
+    _DELTAS = sorted(set(round(d, 4) for _, d in _derive._combos(2)))
+    _orig_run, _orig_gen = E.run, E.generate
+    _SG = {}
+    def _query_z(spectra):
+        items = []
+        for md in (1, -1):
+            grp = [x for x in spectra if x['mode'] == md]
+            if not grp: continue
+            mm, ii = _merge([(x['mz'], x['it']) for x in grp]); prec = float(np.median([x['prec'] for x in grp]))
+            pm_, pi_ = fpnet.prep_peaks(mm, ii, prec)
+            ces = [x['ce'] for x in grp if x['ce'] is not None and not np.isnan(x['ce'])]
+            ads = [x['adduct'] for x in grp]; ad = max(set(ads), key=ads.count)
+            items.append(dict(mz=pm_, it=pi_, prec=prec, adduct_ix=chem.adduct_index(ad), ce=float(np.mean(ces)) if ces else 0.0,
+                              ce_known=1.0 if ces else 0.0, n_merged=min(len(grp), 8), mode=float(md)))
+        z, _ = E.bank.logits_el(items)
+        return z.mean(0)
+    def _run_sg(spectra, target, *a, **k):
+        _SG['z'] = _query_z(spectra[:E.cfg.max_query_spectra]); _SG['drop'] = k.get('drop_pid', -1)
+        return _orig_run(spectra, target, *a, **k)
+    def _gen_sg(analogs, target, exclude_keys):
+        out = _orig_gen(analogs, target, exclude_keys)
+        z = _SG.get('z')
+        if z is None: return out
+        tol = max(E.cfg.gen_tol_da, target * E.cfg.ppm_win * 1e-6)
+        cand = []
+        for d in _DELTAS:
+            m = target - d
+            if m < 60: continue
+            lo = np.searchsorted(P.mass, m - tol, 'left'); hi = np.searchsorted(P.mass, m + tol, 'right')
+            for pid in range(lo, hi):
+                if P.train_sid[pid] >= 0 and pid != _SG['drop']: cand.append(pid)
+        if not cand: return out
+        cand = np.unique(np.array(cand))
+        sc = np.empty(len(cand), np.float32)
+        for b0 in range(0, len(cand), 2048):               # batched: unpacked fingerprints are 10,226 bits per row
+            fb = P.fps(cand[b0:b0 + 2048]).astype(np.float32)
+            sc[b0:b0 + 2048] = (fb @ z) / np.sqrt(np.maximum(fb.sum(1), 1))
+        top = cand[np.argsort(-sc)[:_SG_K]]
+        asim = {int(a_[0]): float(a_[1]) for a_ in analogs}
+        par = [(int(P.train_sid[p_]), asim.get(int(P.train_sid[p_]), E.cfg.gen_min_sim), 0.0, False) for p_ in top]
+        have = set(exclude_keys) | {g['key'] for g in out}
+        extra = _orig_gen(par, target, have)
+        return out + extra
+    E.run, E.generate = _run_sg, _gen_sg
+    print('GEN_SG: structure-guided parents, K =', _SG_K, '| deltas', len(_DELTAS), flush=True)
 RK = pickle.load(open(os.path.join(V4, MAN['ranker']['file']), 'rb'))
 RK_FEATS = list(RK['features']); RK_B = [lgb.Booster(model_str=s) for s in RK['boosters']]
 
@@ -86,6 +145,8 @@ res = {}
 groups = list(q.groupby('key', sort=False))
 if LIMIT:
     groups = groups[:LIMIT]
+if os.environ.get('START'):
+    groups = groups[int(os.environ['START']):]
 for gi, (key, sub) in enumerate(groups):
     nms = sub.nm.values[np.isfinite(sub.nm.values)]
     if not len(nms):
