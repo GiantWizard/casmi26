@@ -28,6 +28,7 @@ ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--tag', required=True)
 ap.add_argument('--outdir', default='/Users/b/casmi26/fp')
 ap.add_argument('--hours', type=float, default=0.0, help='stop early after this many hours (0 = steps only)')
+ap.add_argument('--holdout', default='hold,np', help="folds kept out of training ('' = train on everything, deployment)")
 a = ap.parse_args()
 sys.path.insert(0, a.code)
 os.chdir(a.run)
@@ -35,7 +36,7 @@ import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 from casmi import fpnet, traindata  # noqa: E402
 
-D = traindata.Data('cpu', seed=a.seed, holdout_folds=('hold', 'np'))
+D = traindata.Data('cpu', seed=a.seed, holdout_folds=tuple(f for f in a.holdout.split(',') if f))
 rng = np.random.default_rng(a.seed + 7)
 D.rng = rng
 

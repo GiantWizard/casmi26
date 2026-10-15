@@ -156,6 +156,39 @@ refinement). 12 non-conjugate class-3 molecules of ONP set B, true formula unles
   fingerprint model can be screened with the margin test in seconds, before any FRIGID run (target: closer to the
   truth than to the top-5 for a clear majority).
 
+## Rule-based fragment explanation on the calibrated slice (2026-10-15 afternoon, `bench/netgen/iso_frag.py`)
+
+Question: does a non-learned signal break the pattern that every learned model (FPNet, GLACIER, ICEBERG) agrees on the
+wrong isomer? MAGMa combinatorial fragmentation (ms-pred's engine, as in `frag_rank.py`; prior art MetFrag, MAGMa) scores
+each candidate by the share of measured sqrt-intensity explained by a fragment ion. Scored for the final list's #1 and
+every same-formula candidate in the top 10 (rp_c2fix, ONP A d2 + B d0, non-conjugate class 2: 97 molecules, 59 at
+rank 1; 27 near-misses where the answer is a same-formula isomer in the top 10, 31 hits with another isomer in the top 10).
+
+| MAGMa setting | near-misses: answer above #1 (ties) | hits: #1 above every other isomer (ties) |
+|---|---|---|
+| depth 2, 15 ppm | 8 / 27 (11) | 16 / 31 (4) |
+| depth 2, 5 ppm | 7 / 27 (12) | 16 / 31 (7) |
+| depth 1, 10 ppm | 5 / 27 (21) | 13 / 31 (8) |
+| depth 3, 10 ppm | 7 / 27 (17) | 11 / 31 (11) |
+
+At best 8 possible fixes against 11 hits where another isomer would overtake #1, and many ties (same-formula isomers
+explain the same peaks). Fragment explanation does not separate the isomers we lose on; not replayed, not integrated.
+## Engine-bank swap prepared (not pushed)
+
+- `simA.pt` / `simB.pt` have the engine's checkpoint format (same keys, nbits 10226, d 512, 8 layers) and load in
+  `casmi.fpnet.ModelBank` locally, so the swap is mechanical.
+- But they were fine-tuned from the fold-safe fold0, which never saw part of the training data, while the engine
+  bank `fpnet_full1` was trained on everything; swapping fold0-derived weights in would confound "simulation helps"
+  with "less training data". So prepared the deployment route instead:
+  - `colab/casmi26_fpsim_bank.ipynb` (generator `bench/fpsim/make_colab_bank.py`): fine-tune `fpnet_full1` on real +
+    the full-pool simulations (simA recipe, sim_p 0.5), no holdout (`train_sim.py --holdout ""`, new option), lr 3e-5,
+    2 h on an L4; saves `full1_sim.pt` to Drive; last cell creates the private Kaggle dataset
+    `giantwizard/casmi26-jc-fpsim-bank`. Not run.
+  - `kernels/jc-v7c-simbank` (`make_v7c_variants.py simbank`): the 0.443 notebook with engine 1's bank =
+    `full1_sim.pt`, asserting the dataset is attached (no silent fallback). Not pushed.
+- Expectation is low: on the calibrated near-misses simA prefers the answer over #1 in 7/34, the same as fold0, and
+  simB 9/34. It is the only untested route for the simulation work and needs one GPU run plus one LB submission.
+
 ## Next steps
 
 1. jc-netgen scored 0.436 (2026-10-14): stop the generation direction. First LB result predicted in advance by the
@@ -167,3 +200,6 @@ refinement). 12 non-conjugate class-3 molecules of ONP set B, true formula unles
    small learning rate, so the v4b ranker's FP features stay close to what it was trained on; swap it in as the
    engine bank and judge it on the LB (the proxy cannot replay engine 1).
 4. Any new idea: measure on the non-conjugate in-pool slice of sets A and B first; only large effects are resolvable.
+5. Ruled out 2026-10-15 afternoon: MAGMa fragment explanation as an isomer discriminator (8 fixes vs 11 breaks at best).
+   Ready if Jeffery wants the last simulation test: run `colab/casmi26_fpsim_bank.ipynb`, then push
+   `kernels/jc-v7c-simbank` and submit (both need his OK).
