@@ -51,6 +51,20 @@ are ready to push after the reset.
   (both popularity weights x0.5 / x2 on the 0.443 notebook). Popularity is the one knob no library-molecule proxy can
   judge, and the hidden test's class-2 answers have no public spectra.
 
+## Miss diagnosis on the LB-calibrated slice (`bench/netgen/miss_diag.py`, 2026-10-14 evening)
+
+101 non-conjugate in-pool molecules (ONP A d2 + B d0), final lists = replayed c2fix: MRR 0.707; rank 1: 59, rank 2-25:
+34 (17 at rank 2), not in the top 25: 8 (in neither engine's list; several are odd records: an Mg complex, explicit-H
+SMILES, single spectra).
+- 30 of 34 near-misses lose to a same-formula isomer. Popularity is not the cause (winner more popular 14, answer 16).
+  GLACIER prefers the answer in only 6/22, ICEBERG 11/21; both engines rank the wrong isomer first in 32/34.
+- Half are close family isomers (Tanimoto answer vs #1 >= 0.5, mostly cyclic peptides/lipopeptides of one family),
+  half are wrong scaffolds (Tanimoto 0.10-0.45).
+- The honest fold-safe FPNet also prefers the wrong #1: family 3/17, wrong scaffold 2/17 (answer's median FP rank 4 and
+  7 among the top 10). Not a fusion/weighting bug: every signal agrees on the wrong structure, so only a better
+  spectrum-to-structure model can move this slice. Targeted check for any new FP model (e.g. the Colab simulation-
+  trained one): prefers the answer over our #1 in more than 5 of these 34 near-misses (rows in `miss_diag_AB.csv`).
+
 ## Network-guided analog generation (`bench/netgen/`)
 
 Idea (prior art: NAP, PLOS Comp Biol 2018; NetID, Nat Methods 2021; ModiFinder, JASMS 2024): link test molecules by
