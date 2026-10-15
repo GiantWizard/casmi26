@@ -2,7 +2,7 @@
 status: active
 area: portfolio
 tags: [casmi26, kaggle, session-log]
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # Local session 2026-10-13/14 (Mac): what was built, measured and learned
@@ -111,6 +111,50 @@ candidate pool is simulated).
 - Host (D748363): CC-BY-NC-SA / "other"-licence data "should be fine"; FRIGID checkpoints still unanswered (D746430).
 - Aryan Awasthi's probes: cosine library search 0.150 on public LB (~16% class 1); popularity is badly overrated by any
   validation built from library molecules.
+
+## Simulated-spectra FPNet results (Colab, 2026-10-15)
+
+Held-out NP benchmark (`bench_np.py`, 1,500 clean NP queries; NP panel 499): fold0 0.550 / 0.508, control (more
+training, no simulation) 0.549 / 0.511, **simA** (50% GLACIER-simulated pool spectra) **0.575** / 0.519, simB (same,
+answers' simulations excluded) 0.564 / 0.522; non-NP unchanged (0.80-0.81). Real gain, but below the pre-set kill rule
+(+0.03 over control). Near-miss test on the calibrated slice (answer preferred over our #1): fold0 7/34, simA 7/34,
+simB 9/34. As a same-formula re-scorer in the replay (ONP_EXTRA weight 0.5 / 1) every variant loses on the non-conj
+in-pool slice (A: fold0 -0.041/-0.076, simA -0.030/-0.149, simB -0.032/-0.094; B: -0.031/-0.028, -0.019/-0.029,
+-0.008/-0.013). Not integrated. Only untested route: swap in as engine 1's FP bank (needs a Kaggle GPU run + LB).
+
+## De novo generation with FRIGID (2026-10-15, `bench/denovo/`)
+
+FRIGID-base (MIST MassSpecGym encoder + DLM, official checkpoints, allowed per D746430) run locally on CPU with our own
+token-length model (`frigid_eval.py`). Paper (arXiv 2604.16648): MassSpecGym top-1 16.1% (base), 18.3% (with ICEBERG
+refinement). 12 non-conjugate class-3 molecules of ONP set B, true formula unless noted:
+
+| Fingerprint given to FRIGID | top-1 | top-25 |
+|---|---|---|
+| true ECFP4 (oracle) | 7/12 | 9/12 |
+| true, degraded to Tanimoto ~0.50 | 3/12 | 7/12 |
+| true, degraded to Tanimoto ~0.31 | 1/12 | 2/12 |
+| MIST prediction (Tanimoto ~0.31) | 0/6 | 0/6 |
+| our #1 candidate's fingerprint + its formula (deployment) | 0/12 | 0/12 |
+
+- **Memorization caveat:** none of the ONP answers are in FRIGID's exclusion list (`data/exclude_inchikeys.csv`, the
+  MassSpecGym/NPLIB1 test structures masked from the ~230M-structure pretraining corpus), so the DLM may have seen them.
+  Oracle (true fingerprint + formula) on molecules FRIGID never trained on (excluded MassSpecGym test, NP score > 1):
+  12 out-of-pool, median 36 heavy atoms: top-1 1/12, top-25 2/12 (`frigid/msgx/`); **14 in the hidden test's mass range
+  (279-374 Da; hidden test neutral mass median 328): top-1 0/14, top-25 4/14, all at ranks 7-8** (`frigid/msgx3/`).
+  Same size range on ONP (24-41 heavy atoms): top-25 5/6. Most of the ONP oracle accuracy is memorization; hidden
+  class-3 molecules are not in PubChem, so the honest ceiling with a perfect fingerprint is ~0 at rank 1.
+- **Why deployment fingerprints fail (`fp_consensus.py`, 168 non-conj class-3 ONP molecules):** fingerprint of our
+  #1 candidate has Tanimoto 0.48 to the truth (MIST 0.31), but FRIGID simply regenerates #1 (best generated structure
+  is as close to the answer as #1 itself). The right screen is the margin T(fp, truth) - max T(fp, top-5 candidates):
+  a randomly degraded true fingerprint at Tanimoto 0.31 is closer to the truth than to any top-5 candidate for 95% of
+  molecules (margin +0.11); MIST at the same Tanimoto only 26% (margin -0.04); every blend of #1 / top-5 consensus /
+  MIST tried is 0-15% (margins -0.07..-0.52). MIST's errors are structured toward known molecules, which are the ones
+  already in our pool, so generation lands on candidates we already have.
+- Conclusion: FRIGID de novo is not viable for class 3 here: deployment fingerprints have structured errors (land on
+  pool molecules), and even a perfect fingerprint gives 0/14 at rank 1 on never-trained molecules. Direction stopped
+  2026-10-15. Any new
+  fingerprint model can be screened with the margin test in seconds, before any FRIGID run (target: closer to the
+  truth than to the top-5 for a clear majority).
 
 ## Next steps
 
