@@ -203,3 +203,22 @@ explain the same peaks). Fragment explanation does not separate the isomers we l
 5. Ruled out 2026-10-15 afternoon: MAGMa fragment explanation as an isomer discriminator (8 fixes vs 11 breaks at best).
    Ready if Jeffery wants the last simulation test: run `colab/casmi26_fpsim_bank.ipynb`, then push
    `kernels/jc-v7c-simbank` and submit (both need his OK).
+
+## Own-engine project, Phase 0: calibrated harness (2026-10-15 evening)
+
+Jeffery's direction (2026-10-15): build our own spectrum-to-structure engine with 12 h Colab sessions, and prove every
+change at pipeline level before it costs days. Findings so far:
+- The old "better FP model does not help" result (FP top-1 0.23 -> 0.37, panel MRR 0.722 -> 0.719) swapped banks under
+  the public ranker WITHOUT retraining it, on 265 easy panel molecules. Not a fair test.
+- Leak-free engine rows (`rk/gen_rows.py`, 7,977 held-out training structures, fold-safe bank) with a retrained ranker
+  (`bench/engine/fp_value.py`): class-2 MRR 0.962 overall, but by natural-product score: drug-like (NP <= -1) 0.991,
+  NP 0-1 0.886, **NP > 1: 0.711** (n 299), which matches the real ONP non-conjugate class-2 slice (0.707). Novelty
+  (nearest-neighbour Tanimoto to other train structures) does not explain the easy cases; chemistry does (two thirds of
+  the queries are synthetic Enveda-180-only structures).
+- Harness = the 3,568 usable held-out structures with NP score > 1 (`rk/hold_np1_sids.parquet`; only 12 have timsTOF
+  spectra, so the Enveda timsTOF NP panel stays a separate check). Rows per FP bank via `rk/run_np1.sh NAME CKPT`;
+  comparison via `bench/engine/compare_banks.py` (ranker retrained per bank, identical CV folds, paired bootstrap).
+
+**Pre-registered pass bar for any new engine component (written before any result):** on the NP harness, class-2
+MRR gain >= +0.010 with the paired-bootstrap 95% CI lower bound > 0; no class-1 loss beyond -0.005; then no loss on the
+Enveda NP panel and on the LB-calibrated ONP slice. Only then a 12 h Colab run or an LB submission.
