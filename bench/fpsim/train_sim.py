@@ -12,7 +12,10 @@ import numpy as np, pandas as pd
 ap = argparse.ArgumentParser()
 ap.add_argument('--code', default='/Users/b/casmi26/inputs/v4b/code')
 ap.add_argument('--run', default='/Users/b/casmi26/fp/run')
-ap.add_argument('--init', required=True)
+ap.add_argument('--init', default='', help='checkpoint to fine-tune; empty = new model of --arch')
+ap.add_argument('--arch', default='512,8,8', help='d,layers,heads for a new model')
+ap.add_argument('--hard_k', type=int, default=0, help='replace this many window negatives per query with the hardest ones under the current model (mined from 4x as many window draws)')
+ap.add_argument('--save_every', type=float, default=1.0, help='hours between intermediate checkpoints (Colab disconnect safety)')
 ap.add_argument('--sim', default='')
 ap.add_argument('--sim_p', type=float, default=0.5)
 ap.add_argument('--exclude_sim_pids', default='', help='npy of pids whose simulated spectra are dropped (ablation)')
@@ -97,7 +100,12 @@ def batch():
 dev = a.device
 torch.manual_seed(a.seed)
 PFP = D.PFP.to(dev); ELEM = D.elem.to(dev)
-model = fpnet.load_model(a.init, dev).train()
+if a.init:
+    model = fpnet.load_model(a.init, dev).train()
+else:
+    _d, _l, _h = (int(x) for x in a.arch.split(','))
+    model = fpnet.FPNet(D.nbits, d=_d, layers=_l, heads=_h).to(dev).train()
+    print(f'new FPNet d {_d} layers {_l} heads {_h}: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M params', flush=True)
 decay = [p for n, p in model.named_parameters() if p.ndim >= 2]; no_decay = [p for n, p in model.named_parameters() if p.ndim < 2]
 opt = torch.optim.AdamW([dict(params=decay, weight_decay=0.01), dict(params=no_decay, weight_decay=0.0)], lr=a.lr, betas=(0.9, 0.98))
 t0 = time.time(); ema = {}
@@ -110,6 +118,19 @@ for step in range(1, a.steps + 1):
     for g in opt.param_groups:
         g['lr'] = lr
     inp, pos, negs = batch()
+    if a.hard_k:                                   # hardest same-window negatives under the current model
+        pool_negs = np.concatenate([negs] + [D.negatives(pos) for _ in range(3)], 1)
+        with torch.no_grad():
+            if dev == 'cuda':
+                with torch.autocast('cuda', dtype=fpnet.autocast_dtype('cuda')):
+                    z0, _ = model(*inp)
+            else:
+                z0, _ = model(*inp)
+            pc = torch.as_tensor(pool_negs, device=dev)
+            sc0 = torch.einsum('bkn,bn->bk', fpnet.unpack_gpu(PFP[pc], D.nbits), z0.float())
+            sc0[pc == torch.as_tensor(pos, device=dev)[:, None]] = -1e9
+            hard = torch.gather(pc, 1, sc0.topk(a.hard_k, 1).indices).cpu().numpy()
+        negs = np.concatenate([hard, negs[:, :negs.shape[1] - a.hard_k]], 1)
     cand = torch.as_tensor(np.concatenate([pos[:, None], negs], 1), device=dev)
     if dev == 'cuda':
         with torch.autocast('cuda', dtype=fpnet.autocast_dtype('cuda')):
@@ -130,6 +151,9 @@ for step in range(1, a.steps + 1):
     vals = dict(loss=loss.item(), rank=l_rank.item(), acc=(sc.argmax(1) == 0).float().mean().item())
     for k, v in vals.items():
         ema[k] = v if step == 1 else 0.98 * ema[k] + 0.02 * v
+    if a.save_every and time.time() - getattr(model, '_last_save', t0) > a.save_every * 3600:
+        model.eval(); fpnet.save_ckpt(os.path.join(a.outdir, f'{a.tag}_partial.pt'), model, step, extra=dict(args=vars(a))); model.train()
+        model._last_save = time.time(); print('saved partial at step', step, flush=True)
     if step % 100 == 0:
         print(f'step {step} lr {lr:.2e} ' + ' '.join(f'{k} {v:.4f}' for k, v in ema.items()) +
               f' {step / (time.time() - t0):.2f} it/s', flush=True)

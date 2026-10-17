@@ -12,6 +12,8 @@ import numpy as np, lightgbm as lgb
 ap = argparse.ArgumentParser()
 ap.add_argument('sets', nargs='+'); ap.add_argument('--folds', type=int, default=4)
 ap.add_argument('--rounds', type=int, default=300); ap.add_argument('--seeds', type=int, default=2)
+ap.add_argument('--no-fz-family', action='store_true', help='drop family features built on fz (not recomputable by refp.py)')
+ap.add_argument('--common', action='store_true', help='restrict every bank to the molecules present in all sets (same ranker training size)')
 a = ap.parse_args()
 LEAKY = ('model_views__', 'fragnet__')
 P = dict(objective='lambdarank', metric='None', learning_rate=0.05, num_leaves=31, min_data_in_leaf=40, feature_fraction=0.7,
@@ -40,11 +42,17 @@ def rr_groups(s, y, g):
     return ug, out
 
 
+DATA = {it.split('=', 1)[0]: load(it.split('=', 1)[1]) for it in a.sets}
+COMMON = None
+if a.common:
+    COMMON = None
+    for X_, y_, g_, *_ in DATA.values():
+        COMMON = np.unique(g_) if COMMON is None else np.intersect1d(COMMON, np.unique(g_))
 R = {}
-for item in a.sets:
-    name, d = item.split('=', 1)
-    X, y, g, cl, names = load(d)
-    cols = [i for i, n in enumerate(names) if not n.startswith(LEAKY)]
+for name, (X, y, g, cl, names) in DATA.items():
+    if COMMON is not None:
+        k = np.isin(g, COMMON); X, y, g = X[k], y[k], g[k]
+    cols = [i for i, n in enumerate(names) if not n.startswith(LEAKY) and not (a.no_fz_family and '__' in n and 'fz' in n)]
     ug = np.unique(g)
     fold = (ug * 2654435761 % 2**32) % a.folds          # deterministic per sid: identical folds across banks
     rf = fold[np.searchsorted(ug, g)]
