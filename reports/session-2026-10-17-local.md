@@ -40,7 +40,13 @@ As a same-formula re-scorer in the replay (`ONP_EXTRA`, outputs `mist/runs/fpsim
 vs base2: A -0.011 (w 0.5) / -0.041 (w 1), B -0.006 / -0.005. Slightly less harmful than fold0 (-0.012 / -0.014 at
 w 0.5), still negative.
 
-**Not yet run: the pre-registered engine-level test** (bank swap + retrained ranker on the NP harness,
+**Engine-level test, run 2026-10-18 (refp cache harness, ranker retrained per bank, 2,086 class-2 NP queries):**
+fold0 FP-alone class-2 MRR 0.343 / engine 0.761; simA 0.356 / 0.766 (+0.005, CI -0.001..+0.011); **fplong 0.365 / 0.763
+(+0.001, CI -0.005..+0.007), fails the pre-registered bar.** A real +0.022 FP-alone gain bought less than the oracle value
+curve predicts for that size (~+0.005): the model's improvements fall on molecules the other channels already solve.
+Longer training of this recipe is closed. (Superseded text below kept for the record.)
+
+~~Not yet run: the pre-registered engine-level test~~ (bank swap + retrained ranker on the NP harness,
 `bench/engine/compare_banks.py`, pass bar class-2 +0.010 with CI > 0). That is the test this run was built for; the
 two tests above do not replace it. Next step for this checkpoint: `rk/run_np1.sh fplong ~/casmi26/fp/ckpt/fplong.pt`,
 then `compare_banks.py` against fold0.
