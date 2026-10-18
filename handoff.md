@@ -2,7 +2,7 @@
 status: active
 area: portfolio
 tags: [casmi26, kaggle, handoff]
-updated: 2026-10-14
+updated: 2026-10-18
 ---
 
 # CASMI 2026 handoff
@@ -10,7 +10,7 @@ updated: 2026-10-14
 Kaggle: Enveda CASMI 2026 (MRR@25, ~400 timsTOF test molecules, 9h T4, no internet, NIST banned). Account `giantwizard`.
 Full research report: [[CASMI 2026 approach deep dive]] (in `reports/`), notes in `research_notes/`.
 
-**Latest: see `reports/session-2026-10-13-14-local.md` (local session: netgen, LB-calibrated proxy, fpsim) and `reports/session-2026-10-12-cloud.md` (cloud session log). Ready to submit: `casmi26-jc-lr2`. Kaggle GPU quota nearly exhausted until the weekly reset.**
+**Latest: `reports/session-2026-10-17-local.md` (long Colab FPNet run fplong: 0.575 on bench_np = pilot, negative as re-scorer, engine-level test still to run; network rerank positive on clean slices, kernel jc-v7c-e2r2-net built, not pushed; class-3 detector check) and `reports/decision-tree.md` (plan for the 8 weeks to the 2026-12-14 deadline). Older: `reports/session-2026-10-13-14-local.md`, `reports/session-2026-10-12-cloud.md`.**
 
 ## Scores (public LB)
 - **Best 0.438**: `casmi26-jc-base2` (published 0.438 notebook, unchanged) and `casmi26-jc-c2` (same + fine-tuned GLACIER only for molecules with no [M+H]+/[M+Na]+ spectrum). Use jc-c2 as one final pick.
