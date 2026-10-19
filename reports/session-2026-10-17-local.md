@@ -94,3 +94,22 @@ molecules (2026-10-15), so generation is the bottleneck, not detection.
   DiffMS 2.3% / 8.3%; MADGEN 1.3% / 2.1%.
 
 Decision tree for the remaining 8 weeks: `reports/decision-tree.md`.
+
+## LB probes, 2026-10-18 (kernels/make_probes.py, submitted by Jeffery)
+
+Five submissions on the public split (~124 molecules), all built on our copy of the public 0.443 notebook
+(`kernels/jc-v7c-e2r2`, reproduced **0.443** exactly):
+- top-1 only: **0.401** = share of molecules answered at rank 1.
+- top 25 shuffled and padded to 25 with decoy alkanes (expected score = recall@25 x 0.15264 for any rank distribution;
+  validated offline on ONP set B: estimate 0.256 vs true 0.255): seeds 1/2/3 = 0.091 / 0.087 / 0.075, mean 0.0843
+  -> **recall@25 = 0.553 +- ~0.03**.
+
+Breakdown of public molecules: 40% answered at rank 1; ~15% answered at ranks 2-25 (worth only 0.042 together, typical
+rank 3-4); ~45% not in our top 25. With ~90% offline in-list recall for class 1/2, class 3 ~ 39% (range ~33-45%),
+matching the 16/45/39 participant estimate (D741597) rather than ~52% or ~25%.
+Implications: moving all rank 2-25 answers to rank 1 is worth up to ~+0.11 (a third of them ~+0.04): the reachable pool
+for ranking work. Class 3 remains the largest block.
+
+Same day, harness (refp cache): 3-model FP ensemble (fold0 + simA + fplong) +0.004 (CI -0.001..+0.010), fails;
+ranker trained with 7,457 extra drug-like query rows -0.003 (CI -0.009..+0.002), fails.
+Next: cross-encoder isomer reranker (casmi/xenc.py architecture exists, no weights or training code published).

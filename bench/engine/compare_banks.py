@@ -13,6 +13,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('sets', nargs='+'); ap.add_argument('--folds', type=int, default=4)
 ap.add_argument('--rounds', type=int, default=300); ap.add_argument('--seeds', type=int, default=2)
 ap.add_argument('--no-fz-family', action='store_true', help='drop family features built on fz (not recomputable by refp.py)')
+ap.add_argument('--extra', default='', help='rows dir appended to every training fold (its sids that occur in the eval set are dropped)')
 ap.add_argument('--common', action='store_true', help='restrict every bank to the molecules present in all sets (same ranker training size)')
 a = ap.parse_args()
 LEAKY = ('model_views__', 'fragnet__')
@@ -57,10 +58,19 @@ for name, (X, y, g, cl, names) in DATA.items():
     fold = (ug * 2654435761 % 2**32) % a.folds          # deterministic per sid: identical folds across banks
     rf = fold[np.searchsorted(ug, g)]
     s = np.zeros(len(y))
+    if a.extra and name.endswith('+x'):
+        Xe, ye, ge, _, ne = load(a.extra)
+        assert ne == names, 'extra rows have different features'
+        ke = ~np.isin(ge, ug); Xe, ye, ge = Xe[ke], ye[ke], ge[ke]
+        print(f'  {name}: extra training molecules {len(np.unique(ge))}', flush=True)
     for k in range(a.folds):
         tr = rf != k
-        _, gsz = np.unique(g[tr], return_counts=True)
-        bs = [lgb.train(dict(P, seed=sd), lgb.Dataset(X[tr][:, cols], y[tr], group=gsz), a.rounds) for sd in range(a.seeds)]
+        Xt, yt, gt = X[tr][:, cols], y[tr], g[tr]
+        if a.extra and name.endswith('+x'):
+            Xt = np.concatenate([Xt, Xe[:, cols]]); yt = np.concatenate([yt, ye]); gt = np.concatenate([gt, ge + 10**9])
+            o = np.argsort(gt, kind='stable'); Xt, yt, gt = Xt[o], yt[o], gt[o]
+        _, gsz = np.unique(gt, return_counts=True)
+        bs = [lgb.train(dict(P, seed=sd), lgb.Dataset(Xt, yt, group=gsz), a.rounds) for sd in range(a.seeds)]
         s[~tr] = np.mean([b.predict(X[~tr][:, cols]) for b in bs], 0)
     ug, rr = rr_groups(s, y, g)
     _, fz = rr_groups(X[:, names.index('fz')], y, g)
