@@ -13,19 +13,34 @@ import numpy as np
 
 ap = argparse.ArgumentParser()
 ap.add_argument('cache'); ap.add_argument('out'); ap.add_argument('--ckpt', nargs='+', required=True)
-ap.add_argument('--oracle-beta', type=float, default=0.0); ap.add_argument('--device', default='cpu')
+ap.add_argument('--xenc', default='', help='XEnc checkpoint: also fill the xs_* cross-encoder features (spectrum side = first --ckpt)'); ap.add_argument('--oracle-beta', type=float, default=0.0); ap.add_argument('--device', default='cpu')
 ap.add_argument('--code', default='/Users/b/casmi26/inputs/v4b/code'); ap.add_argument('--work', default='/Users/b/casmi26/rk/work')
 a = ap.parse_args()
 a.cache, a.out = os.path.abspath(a.cache), os.path.abspath(a.out)
+a.ckpt = [os.path.abspath(c) for c in a.ckpt]; a.xenc = os.path.abspath(a.xenc) if a.xenc else ''
 sys.path.insert(0, a.code)
 os.chdir(os.path.dirname(os.path.abspath(a.work)))
 from casmi import chem, fpnet, frag as fragmod  # noqa: E402
 from casmi.pool import Pool  # noqa: E402
 from casmi.spectra import merge_spectra  # noqa: E402
 from casmi.engine import FEATURES, _rank_norm, _z  # noqa: E402
+from casmi import graphs as gmod  # noqa: E402
 
 P = Pool(os.path.basename(os.path.abspath(a.work)))
 bank = fpnet.ModelBank(list(a.ckpt), device=a.device)
+XS = None
+if a.xenc:
+    from casmi import xenc as xmod
+    XS = xmod.XScorer(a.ckpt[0], a.xenc, device=a.device)
+_EMPTY_G = (np.zeros((0, gmod.N_ATOM_FEAT), np.uint8), np.zeros((0, 0), np.uint8), np.zeros((0, 0), np.uint8))
+_gc = {}
+def _graph(pid):
+    if pid < 0:
+        return _EMPTY_G
+    g = _gc.get(pid)
+    if g is None:
+        g = gmod.mol_tokens(P.smiles[pid]) or _EMPTY_G; _gc[pid] = g
+    return g
 os.makedirs(a.out, exist_ok=True)
 C_ = {n: i for i, n in enumerate(FEATURES)}
 FP_COLS = ['fz', 'fz_z', 'fz_rank', 'fz_gap', 'fz_norm', 'fz_top', 'fz_softmax', 'fz_grp_ent', 'fz_grp_gap', 'fz_single',
@@ -123,6 +138,18 @@ for cf in sorted(glob.glob(os.path.join(a.cache, 'cache_*.pkl'))):
                 z_single = z_single + a.oracle_beta * (2 * t - 1); z_merged = z_merged + a.oracle_beta * (2 * t - 1)
         Xm = X[sel]
         fp_block(Xm, c, cfp, z_single, z_merged, 0.5 * (els.mean(0) + elm.mean(0)))
+        if XS is not None:                         # engine X channel (casmi/engine.py), same formulas
+            gitems = [_graph(int(p_)) for p_ in pid]
+            xs_s = XS.score(items_s, gitems, cfp); xs_m = XS.score(items_m, gitems, cfp)
+            for _a in (xs_s, xs_m):                # rare NaN (degenerate graph): lowest score of the molecule
+                if np.isnan(_a).any():
+                    _a[np.isnan(_a)] = np.nanmin(_a) if np.isfinite(_a).any() else 0.0
+            xmax = xs_s.max(0); xmean = xs_s.mean(0); xmer = xs_m.mean(0); xall = 0.5 * (xmax + xmer)
+            Xm[:, C_['xs_max']] = xmax; Xm[:, C_['xs_mean']] = xmean; Xm[:, C_['xs_merged']] = xmer
+            Xm[:, C_['xs_gap']] = xall - xall.max(); Xm[:, C_['xs_rank']] = _rank_norm(xall); Xm[:, C_['xs_z']] = _z(xall)
+            Xm[:, C_['xs_top']] = (xall >= xall.max() - 1e-6).astype(np.float32)
+            xsrt = np.sort(xall)[::-1]
+            Xm[:, C_['xs_grp_gap']] = (xsrt[0] - xsrt[1]) if len(xall) > 1 else 0.0
         X[sel] = Xm
     for n in FP_COLS:
         j = C_[n]; maxdiff[n] = max(maxdiff.get(n, 0.0), float(np.nanmax(np.abs(X[:, j] - old[:, j]))) if len(X) else 0.0)

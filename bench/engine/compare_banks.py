@@ -14,6 +14,7 @@ ap.add_argument('sets', nargs='+'); ap.add_argument('--folds', type=int, default
 ap.add_argument('--rounds', type=int, default=300); ap.add_argument('--seeds', type=int, default=2)
 ap.add_argument('--no-fz-family', action='store_true', help='drop family features built on fz (not recomputable by refp.py)')
 ap.add_argument('--extra', default='', help='rows dir appended to every training fold (its sids that occur in the eval set are dropped)')
+ap.add_argument('--only-sids', default='', help='parquet of sids: restrict every set to these molecules (e.g. the XEnc evaluation half)')
 ap.add_argument('--common', action='store_true', help='restrict every bank to the molecules present in all sets (same ranker training size)')
 a = ap.parse_args()
 LEAKY = ('model_views__', 'fragnet__')
@@ -49,6 +50,10 @@ if a.common:
     COMMON = None
     for X_, y_, g_, *_ in DATA.values():
         COMMON = np.unique(g_) if COMMON is None else np.intersect1d(COMMON, np.unique(g_))
+if a.only_sids:
+    import pandas as pd
+    _keep = np.unique(pd.read_parquet(a.only_sids).sid.values)
+    COMMON = _keep if COMMON is None else np.intersect1d(COMMON, _keep)
 R = {}
 for name, (X, y, g, cl, names) in DATA.items():
     if COMMON is not None:
