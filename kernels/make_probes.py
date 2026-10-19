@@ -42,3 +42,39 @@ for name, mode, seed in (('top1', 'top1', 0), ('shuf1', 'shuf', 1), ('shuf2', 's
     m = dict(meta0, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb')
     json.dump(m, open(f'{d}/kernel-metadata.json', 'w'), indent=1)
     print('wrote', d)
+
+
+# ---- generator-only probe on jc-gen: how many hidden answers does class-3 generation produce on its own? ----
+def make_genonly():
+    src = '/Users/b/casmi26-repo/kernels/jc-gen'
+    nb = json.load(open(f'{src}/casmi26-jc-gen.ipynb')); meta = json.load(open(f'{src}/kernel-metadata.json'))
+    cells = nb['cells']
+    i13 = next(i for i, c in enumerate(cells) if c['cell_type'] == 'code' and 'GEN_TOP_SCORE[str(mid)] = float(scs[0])' in ''.join(c['source']))
+    s = ''.join(cells[i13]['source'])
+    old = "                if pids_ and pids_[0] < 0:\n                    GEN_TOP_SCORE[str(mid)] = float(scs[0])\n"
+    assert s.count(old) == 1
+    s = s.replace(old, old + "                GEN_ONLY[str(mid)] = [x for x, p in zip(smis, pids_) if p < 0]   # probe: engine-1 generated entries, in rank order\n")
+    assert s.count('GEN_TOP_SCORE = {}') == 1
+    s = s.replace('GEN_TOP_SCORE = {}', 'GEN_ONLY = {}\nGEN_TOP_SCORE = {}', 1)
+    cells[i13]['source'] = s
+    cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": r'''# ---- LB PROBE (not a real submission): ONLY engine 1's generated structures (not in the pool) per molecule ----
+_p = pd.read_csv('submission.csv')
+_rows, _n, _tot = [], 0, 0
+for m in _p.molecule_id:
+    g = [x for x in GEN_ONLY.get(str(m), []) if x and x != 'CCO'][:25]
+    _n += bool(g); _tot += len(g)
+    _rows.append((m, ';'.join(g) if g else 'CCO'))
+_q = pd.DataFrame(_rows, columns=['molecule_id', 'smiles'])
+assert len(_q) == len(_p) and _q.molecule_id.is_unique
+_q.to_csv('submission.csv', index=False)
+print('PROBE genonly: molecules with generated candidates', _n, 'of', len(_q), '| mean per molecule', round(_tot / max(_n, 1), 1), flush=True)
+'''})
+    d = '/Users/b/casmi26-repo/kernels/probes/genonly'; os.makedirs(d, exist_ok=True)
+    slug = 'casmi26-jc-probe-genonly'
+    json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
+    json.dump(dict(meta, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb'), open(f'{d}/kernel-metadata.json', 'w'), indent=1)
+    print('wrote', d)
+
+
+if __name__ == '__main__' and os.environ.get('GENONLY'):
+    make_genonly()

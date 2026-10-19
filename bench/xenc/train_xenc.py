@@ -31,6 +31,7 @@ ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--tag', required=True)
 ap.add_argument('--outdir', default='/Users/b/casmi26/xenc')
 ap.add_argument('--save_every', type=float, default=1.0)
+ap.add_argument('--no_fz', action='store_true', help='independent cross-encoder: f.z is NOT an input (zeros, residual weight frozen at 0); the ranker combines it with f.z')
 ap.add_argument('--profile', action='store_true', help='print per-phase timings every 10 steps')
 ap.add_argument('--holdout', default='hold,np')
 ap.add_argument('--train_fold', default='hold', help="train on this split fold, which the frozen FPNet never saw ('' = the FPNet's own training spectra)")
@@ -70,6 +71,10 @@ if a.init:
 else:
     d, L, H = (int(x) for x in a.arch.split(','))
     model = xenc.XEnc(d_spec=fp.d, d=d, layers=L, heads=H).to(dev).train()
+if a.no_fz:
+    with torch.no_grad():
+        model.fz_w.zero_()
+    model.fz_w.requires_grad_(False)
 print(f'XEnc {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M params | spectra {len(D.tr):,}', flush=True)
 _gcache = {}
 
@@ -131,7 +136,7 @@ for step in range(1, a.steps + 1):
     _T.append(time.time())
     si = torch.arange(a.bs, device=dev).repeat_interleave(G)
     with torch.autocast(**amp):
-        sc = model(sx[si], spad[si], atoms, spd, bond, apad, fzs.reshape(-1)).float().reshape(a.bs, G)
+        sc = model(sx[si], spad[si], atoms, spd, bond, apad, (torch.zeros_like(fzs) if a.no_fz else fzs).reshape(-1)).float().reshape(a.bs, G)
     tgt = torch.zeros(a.bs, dtype=torch.long, device=dev)
     loss = F.cross_entropy(sc, tgt)
     opt.zero_grad(set_to_none=True); loss.backward()

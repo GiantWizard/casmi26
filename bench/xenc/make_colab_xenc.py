@@ -24,11 +24,11 @@ code(SETUP)
 code("# 2. embedded training script + held-back evaluation sids (nothing needs to sync up to Drive)\nimport pandas as pd\nTS = '/content/train_xenc.py'\nopen(TS, 'w').write(" + repr(TS) + ")\nEX = '/content/np1_evalhalf.parquet'\npd.DataFrame({'sid': " + repr(EVAL) + "}).to_parquet(EX)\nprint('wrote', TS, 'and', EX)\n")
 code(f"""# 3. train in the background; the log is on Drive (train_xenc.log)
 import time
-HOURS, BS, TAG = {HOURS}, {BS}, 'xenc'
+HOURS, BS, TAG = {HOURS}, {BS}, 'xenc_nofz'
 part = f'{{OUT}}/{{TAG}}_partial.pt'
 init = f'--init {{part}}' if os.path.exists(part) else ''
 cmd = (f'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True {{sys.executable}} {{TS}} --code {{CODE}} --run {{R}}/run --fp {{CK0}} {{init}} --device cuda --bs {{BS}} '
-       f'--steps 60000 --hours {{HOURS}} --exclude_sids {{EX}} --profile --save_every 0.5 --tag {{TAG}} '
+       f'--steps 60000 --hours {{HOURS}} --exclude_sids {{EX}} --no_fz --profile --save_every 0.5 --tag {{TAG}} '
        f'--outdir {{OUT}} >> {{OUT}}/train_{{TAG}}.log 2>&1')
 print(cmd)
 proc = subprocess.Popen(cmd, shell=True)

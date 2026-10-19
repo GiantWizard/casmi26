@@ -13,7 +13,7 @@ import numpy as np
 
 ap = argparse.ArgumentParser()
 ap.add_argument('cache'); ap.add_argument('out'); ap.add_argument('--ckpt', nargs='+', required=True)
-ap.add_argument('--xenc', default='', help='XEnc checkpoint: also fill the xs_* cross-encoder features (spectrum side = first --ckpt)'); ap.add_argument('--oracle-beta', type=float, default=0.0); ap.add_argument('--device', default='cpu')
+ap.add_argument('--only-sids', default='', help='parquet of sids: recompute only these molecules (others keep cached values)'); ap.add_argument('--xenc', default='', help='XEnc checkpoint: also fill the xs_* cross-encoder features (spectrum side = first --ckpt)'); ap.add_argument('--oracle-beta', type=float, default=0.0); ap.add_argument('--device', default='cpu')
 ap.add_argument('--code', default='/Users/b/casmi26/inputs/v4b/code'); ap.add_argument('--work', default='/Users/b/casmi26/rk/work')
 a = ap.parse_args()
 a.cache, a.out = os.path.abspath(a.cache), os.path.abspath(a.out)
@@ -32,6 +32,11 @@ XS = None
 if a.xenc:
     from casmi import xenc as xmod
     XS = xmod.XScorer(a.ckpt[0], a.xenc, device=a.device)
+    import torch as _t
+    if (_t.load(a.xenc, map_location='cpu', weights_only=False).get('args') or {}).get('no_fz'):
+        _fwd = XS.x.forward                      # trained with f.z zeroed: score the same way
+        XS.x.forward = lambda sx, sp, at, sd, bo, ap_, fz: _fwd(sx, sp, at, sd, bo, ap_, _t.zeros_like(fz))
+        print('XEnc trained without f.z input: scoring with f.z zeroed', flush=True)
 _EMPTY_G = (np.zeros((0, gmod.N_ATOM_FEAT), np.uint8), np.zeros((0, 0), np.uint8), np.zeros((0, 0), np.uint8))
 _gc = {}
 def _graph(pid):
@@ -113,11 +118,17 @@ def fp_block(X, c, cfp, z_single, z_merged, el_pred):
 
 
 maxdiff = {}
+ONLY = None
+if a.only_sids:
+    import pandas as pd
+    ONLY = set(pd.read_parquet(a.only_sids).sid.tolist())
 for cf in sorted(glob.glob(os.path.join(a.cache, 'cache_*.pkl'))):
     tag = os.path.basename(cf)[len('cache_'):-len('.pkl')]
     rz = np.load(os.path.join(a.cache, f'rows_{tag}.npz'))
     X = rz['X'].astype(np.float32); g = rz['g']; old = X.copy()
     for c in pickle.load(open(cf, 'rb')):
+        if ONLY is not None and c['sid'] not in ONLY:
+            continue
         sel = np.flatnonzero(g == c['sid'])
         pid = c['pid']; cfp = np.zeros((len(pid), P.nbits), np.float32)
         pool_i = np.flatnonzero(pid >= 0)
