@@ -27,7 +27,7 @@ import time
 HOURS, BS, TAG = {HOURS}, {BS}, 'xenc'
 part = f'{{OUT}}/{{TAG}}_partial.pt'
 init = f'--init {{part}}' if os.path.exists(part) else ''
-cmd = (f'{{sys.executable}} {{TS}} --code {{CODE}} --run {{R}}/run --fp {{CK0}} {{init}} --device cuda --bs {{BS}} '
+cmd = (f'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True {{sys.executable}} {{TS}} --code {{CODE}} --run {{R}}/run --fp {{CK0}} {{init}} --device cuda --bs {{BS}} '
        f'--steps 60000 --hours {{HOURS}} --exclude_sids {{EX}} --profile --save_every 0.5 --tag {{TAG}} '
        f'--outdir {{OUT}} >> {{OUT}}/train_{{TAG}}.log 2>&1')
 print(cmd)
