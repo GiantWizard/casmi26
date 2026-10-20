@@ -113,3 +113,16 @@ for ranking work. Class 3 remains the largest block.
 Same day, harness (refp cache): 3-model FP ensemble (fold0 + simA + fplong) +0.004 (CI -0.001..+0.010), fails;
 ranker trained with 7,457 extra drug-like query rows -0.003 (CI -0.009..+0.002), fails.
 Next: cross-encoder isomer reranker (casmi/xenc.py architecture exists, no weights or training code published).
+
+## 2026-10-19: network rerank on the LB, cross-encoder pilot
+
+- **jc-v7c-e2r2-net: public LB 0.422** vs 0.443 for the same notebook without the rerank (-0.021, ~2-3 public
+  molecules). Offline it was positive on the conjugate-free slice of both ONP sets (+0.006..+0.020, n ~110 each): the
+  first time that slice called a sign wrong. Likely: small n, the kernel reranked e2r2's final lists rather than c2fix's,
+  and the hidden test has far fewer within-set relatives. Network rerank closed; the clean slice is a harm filter only.
+- Cross-encoder (casmi/xenc.py, trainer bench/xenc/train_xenc.py, Colab T4 bs 16, ~30k steps on hold-fold spectra the
+  frozen fold0 FPNet never saw): group accuracy gain over f.z flat at -0.005..+0.003 through the run; on 200 of its own
+  training molecules (truth vs 15 hardest same-formula isomers) MRR 0.473 vs f.z 0.474; on the held-back NP half it
+  hurts (isomer MRR 0.286 vs 0.378, worse on 406 / better on 38) and the harness gives -0.000 (CI -0.006..+0.006).
+  Likely cause: the frozen FPNet encoder has already reduced the spectrum to fingerprint information. Not pursued
+  further unless an unfrozen, f.z-free pilot is run (option prepared: --no_fz).
