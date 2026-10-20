@@ -131,3 +131,27 @@ Next: cross-encoder isomer reranker (casmi/xenc.py architecture exists, no weigh
   any merge of this generator: +0.011 with zero displacement; jc-gen's merge lost -0.007. Analog generation (one/two
   biotransformation edits of library/pool relatives) is closed as a route to class 3; FRIGID de novo was ~0 on
   never-trained molecules. Remaining effort: compliance retraining (E1) and final picks.
+
+## 2026-10-20: the public lineage moved past 0.443, and HOW it moved
+
+Pulled from Kaggle (`kaggle kernels list --competition ... --sort-by scoreDescending`, notebooks in ~/casmi26/lineage/);
+scores are the authors' own stated public LB:
+| step | change | public LB |
+|---|---|---|
+| E006 + e2rank2 (our jc-v7c-e2r2) | | 0.442-0.443 |
+| + PubChem promotion fires at rel > 150 (was > 250; > 100 gave 0.444) | promote PubChem candidates more readily | 0.446 |
+| + metric-identity E2R2; engine-2 ChEBI/LIPID MAPS swapped to sergiomalv's CC BY 98k set | more candidates in engine 2 | 0.451 |
+| ahmedberatozer v14: + PubChemLite CC0 structures in engine 2's pool | more candidates in engine 2 | 0.455 |
+| v15: + N1A (GLACIER scores from [M+NH4]+ / [M-H2O+H]+ proxies) | forward-model coverage | not stated |
+| guhongbin v465 / v475 (sorted top): v15 with POP_LAM 0.25 -> 0.15 (+ POP_UNION 200 -> 300) for the PubChem-only list | popularity prior | not stated |
+
+Lesson: nearly every LB gain since 0.443 came from candidate RECALL (more correct known structures reaching the list:
+PubChem promotion, ChEBI/LMSD, PubChemLite), not from better ranking. Consistent with our own numbers: 45% of public
+molecules have no answer in our top 25 (shuffle probes), and offline the PubChem channel ranks 7 / 125 out-of-pool ONP
+answers #1 that the pipeline then drops. Part of what the probes attributed to class 3 is reachable known chemistry; the
+~39% class-3 estimate was too pessimistic.
+
+Next (proposed): base on the current public frontier (v15 / v475), then push the same lever further and measure each
+step with candidate-only LB probes (score of a list containing ONLY database X's candidates = that source's hits on the
+hidden test): further CC0/CC-BY structure sources (LOTUS / Wikidata NPs, NPAtlas), larger PubChem subsets ranked by
+popularity, and the PubChem channel's discarded #1s (pconly probe pending).
