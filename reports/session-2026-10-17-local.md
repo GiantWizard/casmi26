@@ -126,3 +126,8 @@ Next: cross-encoder isomer reranker (casmi/xenc.py architecture exists, no weigh
   hurts (isomer MRR 0.286 vs 0.378, worse on 406 / better on 38) and the harness gives -0.000 (CI -0.006..+0.006).
   Likely cause: the frozen FPNet encoder has already reduced the spectrum to fingerprint information. Not pursued
   further unless an unfrozen, f.z-free pilot is run (option prepared: --no_fz).
+- **Generator-only LB probe** (kernels/probes/genonly: jc-gen's engine-1 generated structures alone, wide + default
+  pass, in engine-1 rank order; everything else 'CCO'): **public 0.011**, i.e. about one hidden answer. Upper bound for
+  any merge of this generator: +0.011 with zero displacement; jc-gen's merge lost -0.007. Analog generation (one/two
+  biotransformation edits of library/pool relatives) is closed as a route to class 3; FRIGID de novo was ~0 on
+  never-trained molecules. Remaining effort: compliance retraining (E1) and final picks.
