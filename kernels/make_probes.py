@@ -78,3 +78,27 @@ print('PROBE genonly: molecules with generated candidates', _n, 'of', len(_q), '
 
 if __name__ == '__main__' and os.environ.get('GENONLY'):
     make_genonly()
+
+
+# ---- PubChem-channel-only probe on jc-v7c-e2r2: how many hidden answers does the channel's own ranking get? ----
+def make_pconly():
+    src = '/Users/b/casmi26-repo/kernels/jc-v7c-e2r2'
+    nb = json.load(open(f'{src}/casmi26-jc-v7c-e2r2.ipynb')); meta = json.load(open(f'{src}/kernel-metadata.json'))
+    nb['cells'].append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": r'''# ---- LB PROBE (not a real submission): ONLY the PubChem channel's raw ranked list per molecule ----
+_pcraw = json.load(open('/kaggle/working/pc_lists.json'))
+_p = pd.read_csv('submission.csv')
+_rows, _n = [], 0
+for m in _p.molecule_id:
+    l = [x for x in ((_pcraw.get(str(m)) or {}).get('pc') or []) if x and x != 'CCO'][:25]
+    _n += bool(l)
+    _rows.append((m, ';'.join(l) if l else 'CCO'))
+_q = pd.DataFrame(_rows, columns=['molecule_id', 'smiles'])
+assert len(_q) == len(_p) and _q.molecule_id.is_unique
+_q.to_csv('submission.csv', index=False)
+print('PROBE pconly: molecules with PubChem-channel candidates', _n, 'of', len(_q), flush=True)
+'''})
+    d = '/Users/b/casmi26-repo/kernels/probes/pconly'; os.makedirs(d, exist_ok=True)
+    slug = 'casmi26-jc-probe-pconly'
+    json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
+    json.dump(dict(meta, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb'), open(f'{d}/kernel-metadata.json', 'w'), indent=1)
+    print('wrote', d)
