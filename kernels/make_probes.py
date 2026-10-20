@@ -102,3 +102,43 @@ print('PROBE pconly: molecules with PubChem-channel candidates', _n, 'of', len(_
     json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
     json.dump(dict(meta, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb'), open(f'{d}/kernel-metadata.json', 'w'), indent=1)
     print('wrote', d)
+
+
+# ---- disagreement probes on jc-v465: when PubChem channel #1 != final #1, who is right? ----
+def make_disagree():
+    src = '/Users/b/casmi26-repo/kernels/jc-v465'
+    nb0 = json.load(open(f'{src}/casmi26-jc-v465.ipynb')); meta0 = json.load(open(f'{src}/kernel-metadata.json'))
+    CELL = r'''# ---- LB PROBE (not a real submission) mode=%(mode)r: molecules where the PubChem channel's #1 differs from the
+# final #1 get ONE guess (A: the channel's #1, B: the final #1); every other molecule gets 'CCO' (scores 0).
+_MODE = %(mode)r
+_pcraw = json.load(open('/kaggle/working/pc_lists.json'))
+_mi = globals()['metric_identity']
+def _k(s):
+    try:
+        return _mi(s) if isinstance(s, str) and s and s != 'CCO' else None
+    except Exception:
+        return None
+_p = pd.read_csv('submission.csv')
+_rows, _n = [], 0
+for m, s in zip(_p.molecule_id, _p.smiles):
+    toks = [t for t in str(s).split(';') if t and t != 'CCO']
+    f1 = toks[0] if toks else None
+    c1 = next((x for x in ((_pcraw.get(str(m)) or {}).get('pc') or []) if _k(x)), None)
+    if f1 and c1 and _k(c1) != _k(f1):
+        _n += 1
+        _rows.append((m, c1 if _MODE == 'A' else f1))
+    else:
+        _rows.append((m, 'CCO'))
+_q = pd.DataFrame(_rows, columns=['molecule_id', 'smiles'])
+assert len(_q) == len(_p) and _q.molecule_id.is_unique
+_q.to_csv('submission.csv', index=False)
+print('PROBE disagree', _MODE, ': molecules where channel #1 != final #1:', _n, 'of', len(_q), flush=True)
+'''
+    for name, mode in (('disA', 'A'), ('disB', 'B')):
+        nb = json.loads(json.dumps(nb0))
+        nb['cells'].append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": CELL % dict(mode=mode)})
+        d = f'/Users/b/casmi26-repo/kernels/probes/{name}'; os.makedirs(d, exist_ok=True)
+        slug = f'casmi26-jc-probe-{name}'
+        json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
+        json.dump(dict(meta0, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb'), open(f'{d}/kernel-metadata.json', 'w'), indent=1)
+        print('wrote', d)

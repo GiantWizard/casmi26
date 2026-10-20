@@ -155,3 +155,9 @@ Next (proposed): base on the current public frontier (v15 / v475), then push the
 step with candidate-only LB probes (score of a list containing ONLY database X's candidates = that source's hits on the
 hidden test): further CC0/CC-BY structure sources (LOTUS / Wikidata NPs, NPAtlas), larger PubChem subsets ranked by
 popularity, and the PubChem channel's discarded #1s (pconly probe pending).
+- **jc-v7c-own (compliant engine 1: fold0 bank, our ranker, no fe_A/B/D): public 0.397** vs 0.443 (-0.046); offline
+  engine-level estimate was -0.036. Not shippable; our ranker must close the gap first (largest offline loss: class 1).
+- **PubChem-channel-only probe (raw channel lists of jc-v7c-e2r2): public 0.040** (~5 public molecules' worth), vs 0.011
+  for the generator. The channel holds real hidden answers; overlap with what the pipeline already ranks #1 is unknown.
+  Pushed `casmi26-jc-probe-disa/-disb` on the jc-v465 base: where channel #1 != final #1, submit only the channel's
+  (A) or only the final's (B) #1 -> who is right on disagreements.
