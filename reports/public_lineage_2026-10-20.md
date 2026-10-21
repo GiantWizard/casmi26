@@ -33,3 +33,11 @@ Every step after 0.443 is candidate recall (curated structure sets, PubChem) or 
 PubChem channel's #1 (promotion thresholds, popularity gate). None is a better spectrum model or generation. Matches our
 measurements: 45% of public molecules have no answer in our top 25; the PubChem channel alone scores 0.040 on the hidden
 test; offline it ranks answers #1 that the pipeline drops. Related: [[forum_scrape_2026-10-14]], [[handoff]].
+
+## LB results, 2026-10-20
+
+- v465 copy (giantwizard/casmi26-jc-v465): **0.456**, matching the public number. This is a copy, not our improvement.
+- Disagreement probe B (final #1 only, on molecules where the PubChem channel's #1 differs): **0.377**.
+- Disagreement probe A (the channel's #1 on those same molecules): **0.000**.
+- Reading, per the rule fixed before submitting: A < B. On the public split the channel's #1 is never right when v465 overrules it, so a better PubChem-trust gate has nothing to recover there. B ≈ 0.377 against a top-1 rate of about 0.40–0.41 means the channel disagrees with the final #1 on nearly every molecule v465 gets right.
+- Next: candidate recall (about 45% of answers are absent from the top 25), using candidate-only source probes.
