@@ -191,6 +191,11 @@ RK = pickle.load(open(_RKF[0], 'rb'))""")
     s = rep(s, "BASE, n_err = {}, 0\n", "BASE, n_err = {}, 0\nBASE_RAW = {}\n")
     s = rep(s, "    if POOLPOP_MU > 0 and len(scs) > 1:", "    BASE_RAW[mid] = (list(smis), list(keys), list(scs), list(pids_), lib_max)\n    if POOLPOP_MU > 0 and len(scs) > 1:")
     cells[20]['source'] = s
+    # E004 preflight only accepts the competition mount: also accept the simulated one
+    s = ''.join(cells[9]['source'])
+    s = rep(s, "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}'}",
+            "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}', '/kaggle/working/fake_comp'}")
+    cells[9]['source'] = s
     q = Q[Q.shard == sh][['sid', 'cls', 'panel']]
     fake = FAKE % dict(Q=repr({c: q[c].tolist() for c in q.columns}), seed=1000 + sh, shard=sh)
     code = lambda x: {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': x}
