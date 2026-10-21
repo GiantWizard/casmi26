@@ -48,7 +48,7 @@ def rep(s, old, new):
 
 
 FAKE = r'''# ---- ROWGEN: simulated test molecules from held-out training structures (kernels/make_rowgen.py) ----
-import pyarrow as pa, pyarrow.parquet as pq
+import os, numpy as np, pandas as pd, pyarrow as pa, pyarrow.parquet as pq
 _Q = pd.DataFrame(%(Q)s)
 _REAL = COMP
 _FAKE = '/kaggle/working/fake_comp'; os.makedirs(_FAKE, exist_ok=True); os.makedirs('/kaggle/working/rowgen', exist_ok=True)
@@ -105,7 +105,7 @@ print('ROWGEN shard %(shard)d:', _te.molecule_id.nunique(), 'molecules,', len(_t
 '''
 
 DUMP = r'''# ---- ROWGEN: save every stage's candidates and scores (%(when)s) ----
-import pickle, shutil
+import os, pickle, shutil
 _R = '/kaggle/working/rowgen'; os.makedirs(_R, exist_ok=True)
 _objs = {}
 for _n in ['BASE', 'BASE_RAW', 'ENG', 'ICE_SCORES', 'GL_SCORES', 'PREFUSION_LISTS', 'FUSION_OVERFLOW', 'FRAG_GAP', 'lib_max_of']:
