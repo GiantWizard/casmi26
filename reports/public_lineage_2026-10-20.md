@@ -41,3 +41,15 @@ test; offline it ranks answers #1 that the pipeline drops. Related: [[forum_scra
 - Disagreement probe A (the channel's #1 on those same molecules): **0.000**.
 - Reading, per the rule fixed before submitting: A < B. On the public split the channel's #1 is never right when v465 overrules it, so a better PubChem-trust gate has nothing to recover there. B ≈ 0.377 against a top-1 rate of about 0.40–0.41 means the channel disagrees with the final #1 on nearly every molecule v465 gets right.
 - Next: candidate recall (about 45% of answers are absent from the top 25), using candidate-only source probes.
+
+## Candidate-bank check, 2026-10-21
+
+Source: dmitriigluzdov "The Data Behind Spectra to Structures" (pulled copy in ~/casmi26/lineage/all/), its Sections 4 and 6.
+- Natural Product Knowledge Table: 152,717 LOTUS + NPAtlas natural products; 98.2% are already in the public candidate pool.
+- Its version table, one change per version: natural-product bonus 0.451 -> 0.451; PubChemLite in engine 2 0.451 -> 0.448
+  (0.455 only after the engine-2 trees went back to depth 6); LOTUS literature prior 0.448 -> 0.448; PubChem supplements
+  (recent deposits) + external reference spectra: no public score given.
+- The author's own conclusion: added catalogues also add competing structures that can displace correct answers.
+Decision: no new candidate bank. LOTUS/NPAtlas would add about 2.7k structures, and the one-change-per-version scores show
+no gain from the natural-product additions. The missing hidden answers are more likely in the pool and ranked too low, which
+is the stacked reranker's job.
