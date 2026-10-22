@@ -26,7 +26,8 @@
   "ahmedberatozer/casmi26-v4b-models",
   "sergiomalv/casmi-chebi-lmsd-structures",
   "prvsiyan/coconut-casmi26-candidates",
-  "metric/rdkit-2026-3-3-wheel"
+  "metric/rdkit-2026-3-3-wheel",
+  "giantwizard/casmi26-jc-stack-model"
  ],
  "kernel_sources": [],
  "competition_sources": [

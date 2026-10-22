@@ -3,24 +3,23 @@ of all channels, as in bench/stack/build_rows.py) with the reranker trained by b
   stack-full: v465's own models (what the public pipeline runs); the reranker was trained on fold-safe features, so this
               tests whether it transfers to the stronger full models;
   stack-safe: the rowgen configuration (fold-safe models, compliant engine 1), the same features the reranker trained on.
-usage: make_stackinf.py MODEL.pkl
+The model and build_rows.py are read from the private dataset giantwizard/casmi26-jc-stack-model (Kaggle refuses a
+notebook with the model embedded).
+usage: make_stackinf.py
 """
-import base64, json, os, sys
+import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_rowgen as RG  # noqa: E402
 
-MODEL = open(sys.argv[1], 'rb').read()
-CODE = open('/Users/b/casmi26-repo/bench/stack/build_rows.py').read()
 OUT = '/Users/b/casmi26-repo/kernels/stack'
 STACK = r'''# ---- STACK: reorder each molecule's candidates with the stacked reranker (kernels/make_stackinf.py) ----
-import base64, os, pickle, sys
+import glob, os, pickle, sys
 import numpy as np, pandas as pd, lightgbm as lgb
 from multiprocessing import Pool
-os.makedirs('/kaggle/working/stackcode', exist_ok=True)
-open('/kaggle/working/stackcode/build_rows.py', 'w').write(%(code)r)
-sys.path.insert(0, '/kaggle/working/stackcode')
+_SD = os.path.dirname(glob.glob('/kaggle/input/**/casmi26-jc-stack-model/**/stack_model.pkl', recursive=True)[0])
+sys.path.insert(0, _SD)
 import build_rows as BR
-_M = pickle.loads(base64.b64decode(%(model)r))
+_M = pickle.load(open(os.path.join(_SD, 'stack_model.pkl'), 'rb'))
 _B = [lgb.Booster(model_str=x) for x in _M['boosters']]
 _S = BR.load('/kaggle/working')
 _sm = sorted(BR.collect_smiles(_S))
@@ -43,13 +42,13 @@ code = lambda x: {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 
 for name, safe in (('full', False), ('safe', True)):
     nb = json.loads(json.dumps(RG.nb0))
     cells = RG.patch(nb['cells'], safe=safe)
-    stack = STACK % dict(code=CODE, model=base64.b64encode(MODEL).decode())
+    stack = STACK
     new = cells[:27] + [code(RG.DUMP % dict(when='fusion'))] + cells[27:] + [code(stack)]
     new[0] = dict(new[0], source=f'# jc-stack-{name}: v465 ({"fold-safe models" if safe else "its own models"}) + a stacked reranker over every '
                   'channel\'s candidates. Built by kernels/make_stackinf.py.\n\n' + ''.join(new[0]['source']))
     nb['cells'] = new
     slug = f'casmi26-jc-stack-{name}'
-    ds = list(RG.meta0['dataset_sources'])
+    ds = list(RG.meta0['dataset_sources']) + ['giantwizard/casmi26-jc-stack-model']
     if safe:
         ds = [d for d in ds if d not in ('ahmedberatozer/casmi26-fpnet-full1', 'prvsiyan/casmi26-fp-models-v2')]
         ds += ['giantwizard/casmi26-jc-own-ranker', 'dmitriigluzdov/casmi26-fold-safe-fpnet', 'giantwizard/casmi26-e2fp-f0']

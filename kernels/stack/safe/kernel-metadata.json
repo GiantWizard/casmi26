@@ -25,6 +25,7 @@
   "sergiomalv/casmi-chebi-lmsd-structures",
   "prvsiyan/coconut-casmi26-candidates",
   "metric/rdkit-2026-3-3-wheel",
+  "giantwizard/casmi26-jc-stack-model",
   "giantwizard/casmi26-jc-own-ranker",
   "dmitriigluzdov/casmi26-fold-safe-fpnet",
   "giantwizard/casmi26-e2fp-f0"
