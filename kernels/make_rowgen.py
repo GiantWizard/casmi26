@@ -20,22 +20,6 @@ import numpy as np, pandas as pd
 SRC = '/Users/b/casmi26-repo/kernels/jc-v465'; OUT = '/Users/b/casmi26-repo/kernels/rowgen'; NSH = 4
 nb0 = json.load(open(f'{SRC}/casmi26-jc-v465.ipynb')); meta0 = json.load(open(f'{SRC}/kernel-metadata.json'))
 
-# ---- queries ----
-pm = pd.read_parquet('/Users/b/casmi26/inputs/v2-pool/pool_meta.parquet', columns=['train_sid', 'src'])
-src = pm[pm.train_sid >= 0].set_index('train_sid').src
-ts = pd.read_parquet('/Users/b/casmi26/inputs/v2-pool/train_structs.parquet', columns=['sid', 'n_spec']).set_index('sid').n_spec
-sp = pd.read_parquet('/Users/b/casmi26/inputs/foldsafe/split.parquet')
-ev = pd.read_parquet('/Users/b/casmi26/rk/np1_evalhalf.parquet').sid.values
-panel = sp[sp.fold == 'np'].sid.values
-c2 = [int(s) for s in np.concatenate([ev, panel]) if src.get(s) == 3]
-rng = np.random.default_rng(26)
-pool1 = [int(s) for s in ev if src.get(s) != 3 and ts.get(s, 0) >= 4]
-c1 = sorted(rng.choice(pool1, min(300, len(pool1)), replace=False).tolist())
-Q = pd.DataFrame({'sid': c2 + c1, 'cls': [2] * len(c2) + [1] * len(c1)})
-Q['panel'] = Q.sid.isin(panel)
-Q = Q.sample(frac=1, random_state=26).reset_index(drop=True)
-Q['shard'] = np.arange(len(Q)) % NSH
-print('queries', len(Q), Q.groupby(['cls', 'panel']).size().to_dict())
 
 
 def esc(x):                                        # code inside cell 13/15's embedded-file strings is escaped
@@ -132,12 +116,12 @@ for _f in ['submission.csv', 'pc_lists.json', 'eng_lists.json', 'ice_work/ice_ou
 print('ROWGEN dump %(when)s:', sorted(os.listdir(_R)), flush=True)
 '''
 
-for sh in range(NSH):
-    nb = json.loads(json.dumps(nb0))
-    cells = nb['cells']
-    # engine 2: retrained FPNets, and keep the blend scores of the listed candidates
+def patch(cells, safe=True):
+    """Save every stage's scores (engine-2 blend/pv/ours, engine-1 list before the popularity re-sort); with safe=True also
+    swap in the models that never saw fold 0 / the panel."""
     s = ''.join(cells[13]['source'])
-    s = rep(s, esc("if 'casmi26-fp-models-v2' in p)"), esc("if 'casmi26-e2fp-f0' in p)\n    assert len(fp_models) == 2, fp_models"))
+    if safe:
+        s = rep(s, esc("if 'casmi26-fp-models-v2' in p)"), esc("if 'casmi26-e2fp-f0' in p)\n    assert len(fp_models) == 2, fp_models"))
     s = rep(s, esc("""        smis, keys, seen = [], [], set()
         for c in r['cand'][order]:
             s = E.POOL['smiles'][c]; k = E.canon_key(s)
@@ -158,6 +142,13 @@ for sh in range(NSH):
                 break
         res[str(mid)] = dict(smiles=smis, keys=keys, blend=sc, pv=spv, ours=sours)"""))
     cells[13]['source'] = s
+    # engine 1 lists before the popularity re-sort
+    s = ''.join(cells[20]['source'])
+    s = rep(s, "BASE, n_err = {}, 0\n", "BASE, n_err = {}, 0\nBASE_RAW = {}\n")
+    s = rep(s, "    if POOLPOP_MU > 0 and len(scs) > 1:", "    BASE_RAW[mid] = (list(smis), list(keys), list(scs), list(pids_), lib_max)\n    if POOLPOP_MU > 0 and len(scs) > 1:")
+    cells[20]['source'] = s
+    if not safe:
+        return cells
     # PubChem channel: fold-safe FPNet
     s = ''.join(cells[15]['source'])
     s = rep(s, esc("""models = sorted(glob.glob(os.path.join(V3MOD, 'fpnet_*.pt')))
@@ -186,30 +177,48 @@ print('engine-1 families (fold-safe):', OWN_FAMILIES, flush=True)""")
 assert _RKF, 'our ranker not attached'
 RK = pickle.load(open(_RKF[0], 'rb'))""")
     cells[18]['source'] = s
-    # engine 1 lists before the popularity re-sort
-    s = ''.join(cells[20]['source'])
-    s = rep(s, "BASE, n_err = {}, 0\n", "BASE, n_err = {}, 0\nBASE_RAW = {}\n")
-    s = rep(s, "    if POOLPOP_MU > 0 and len(scs) > 1:", "    BASE_RAW[mid] = (list(smis), list(keys), list(scs), list(pids_), lib_max)\n    if POOLPOP_MU > 0 and len(scs) > 1:")
-    cells[20]['source'] = s
-    # E004 preflight only accepts the competition mount: also accept the simulated one
-    s = ''.join(cells[9]['source'])
-    s = rep(s, "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}'}",
-            "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}', '/kaggle/working/fake_comp'}")
-    cells[9]['source'] = s
-    q = Q[Q.shard == sh][['sid', 'cls', 'panel']]
-    fake = FAKE % dict(Q=repr({c: q[c].tolist() for c in q.columns}), seed=1000 + sh, shard=sh)
-    code = lambda x: {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': x}
-    new = cells[:9] + [code(fake)] + cells[9:27] + [code(DUMP % dict(when='fusion'))] + cells[27:] + [code(DUMP % dict(when='final'))]
-    new[0] = dict(new[0], source='# ROWGEN shard %d: the v465 pipeline (fold-safe models) on simulated test molecules from held-out '
-                  'training structures; saves every stage for stacked-reranker rows. Not a submission. Built by kernels/make_rowgen.py.\n\n' % sh
-                  + ''.join(new[0]['source']))
-    nb['cells'] = new
-    slug = f'casmi26-jc-rowgen-s{sh}'
-    ds = [d for d in meta0['dataset_sources'] if d not in ('ahmedberatozer/casmi26-fpnet-full1', 'prvsiyan/casmi26-fp-models-v2')]
-    ds += ['giantwizard/casmi26-jc-own-ranker', 'dmitriigluzdov/casmi26-fold-safe-fpnet', 'giantwizard/casmi26-e2fp-f0']
-    d = f'{OUT}/s{sh}'; os.makedirs(d, exist_ok=True)
-    json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
-    json.dump(dict(meta0, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb', dataset_sources=ds),
-              open(f'{d}/kernel-metadata.json', 'w'), indent=1)
-Q.to_parquet(f'{OUT}/queries.parquet')
-print('wrote', NSH, 'shards to', OUT)
+    return cells
+
+
+if __name__ == '__main__':
+    # ---- queries ----
+    pm = pd.read_parquet('/Users/b/casmi26/inputs/v2-pool/pool_meta.parquet', columns=['train_sid', 'src'])
+    src = pm[pm.train_sid >= 0].set_index('train_sid').src
+    ts = pd.read_parquet('/Users/b/casmi26/inputs/v2-pool/train_structs.parquet', columns=['sid', 'n_spec']).set_index('sid').n_spec
+    sp = pd.read_parquet('/Users/b/casmi26/inputs/foldsafe/split.parquet')
+    ev = pd.read_parquet('/Users/b/casmi26/rk/np1_evalhalf.parquet').sid.values
+    panel = sp[sp.fold == 'np'].sid.values
+    c2 = [int(s) for s in np.concatenate([ev, panel]) if src.get(s) == 3]
+    rng = np.random.default_rng(26)
+    pool1 = [int(s) for s in ev if src.get(s) != 3 and ts.get(s, 0) >= 4]
+    c1 = sorted(rng.choice(pool1, min(300, len(pool1)), replace=False).tolist())
+    Q = pd.DataFrame({'sid': c2 + c1, 'cls': [2] * len(c2) + [1] * len(c1)})
+    Q['panel'] = Q.sid.isin(panel)
+    Q = Q.sample(frac=1, random_state=26).reset_index(drop=True)
+    Q['shard'] = np.arange(len(Q)) % NSH
+    print('queries', len(Q), Q.groupby(['cls', 'panel']).size().to_dict())
+    for sh in range(NSH):
+        nb = json.loads(json.dumps(nb0))
+        cells = patch(nb['cells'], safe=True)
+        # E004 preflight only accepts the competition mount: also accept the simulated one
+        s = ''.join(cells[9]['source'])
+        s = rep(s, "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}'}",
+                "assert comp in {f'/kaggle/input/{slug}', f'/kaggle/input/competitions/{slug}', '/kaggle/working/fake_comp'}")
+        cells[9]['source'] = s
+        q = Q[Q.shard == sh][['sid', 'cls', 'panel']]
+        fake = FAKE % dict(Q=repr({c: q[c].tolist() for c in q.columns}), seed=1000 + sh, shard=sh)
+        code = lambda x: {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': x}
+        new = cells[:9] + [code(fake)] + cells[9:27] + [code(DUMP % dict(when='fusion'))] + cells[27:] + [code(DUMP % dict(when='final'))]
+        new[0] = dict(new[0], source='# ROWGEN shard %d: the v465 pipeline (fold-safe models) on simulated test molecules from held-out '
+                      'training structures; saves every stage for stacked-reranker rows. Not a submission. Built by kernels/make_rowgen.py.\n\n' % sh
+                      + ''.join(new[0]['source']))
+        nb['cells'] = new
+        slug = f'casmi26-jc-rowgen-s{sh}'
+        ds = [d for d in meta0['dataset_sources'] if d not in ('ahmedberatozer/casmi26-fpnet-full1', 'prvsiyan/casmi26-fp-models-v2')]
+        ds += ['giantwizard/casmi26-jc-own-ranker', 'dmitriigluzdov/casmi26-fold-safe-fpnet', 'giantwizard/casmi26-e2fp-f0']
+        d = f'{OUT}/s{sh}'; os.makedirs(d, exist_ok=True)
+        json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
+        json.dump(dict(meta0, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb', dataset_sources=ds),
+                  open(f'{d}/kernel-metadata.json', 'w'), indent=1)
+    Q.to_parquet(f'{OUT}/queries.parquet')
+    print('wrote', NSH, 'shards to', OUT)
