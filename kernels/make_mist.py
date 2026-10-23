@@ -10,14 +10,14 @@ nb0 = json.load(open(f'{SRC}/casmi26-jc-v492.ipynb')); meta0 = json.load(open(f'
 CELL = r'''# ---- MIST same-formula re-ordering (kernels/make_mist.py), weight %(lam)s ----
 import glob, os, subprocess, sys, time
 import pandas as pd, torch
-_MD = os.path.dirname(glob.glob('/kaggle/input/**/casmi26-mist/**/mist_msg_noaug.ckpt', recursive=True)[0])
+_MD = os.path.dirname(glob.glob('/kaggle/input/**/casmi26-mist/**/mist_msg_aug.ckpt', recursive=True)[0])
 subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps', '-q', glob.glob(_MD + '/mist-*.whl')[0]])
 os.makedirs('/kaggle/working/mistcode', exist_ok=True)
 open('/kaggle/working/mistcode/mist_rerank.py', 'w').write(%(code)r)
 sys.path.insert(0, '/kaggle/working/mistcode')
 import mist_rerank as MR
 _t = time.time(); _dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-_mm = MR.load(os.path.join(_MD, 'mist_msg_noaug.ckpt'), _dev)
+_mm = MR.load(os.path.join(_MD, 'mist_msg_aug.ckpt'), _dev)
 print('MIST selftest (Enveda panel [M+H]+, truth vs same-formula training structures):',
       MR.selftest(os.path.join(COMP, 'train.parquet'), _mm, _dev), f'{time.time() - _t:.0f}s', flush=True)
 _sub = pd.read_csv('submission.csv')

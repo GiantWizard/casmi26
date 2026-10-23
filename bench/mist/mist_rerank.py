@@ -1,4 +1,4 @@
-"""MIST (coleygroup/MIST, MassSpecGym checkpoint) as a same-formula re-ordering signal for a finished submission.
+"""MIST (coleygroup/MIST, MassSpecGym augmented checkpoint; the real-only one predicts a constant fingerprint) as a same-formula re-ordering signal for a finished submission.
 
 For each molecule and each molecular formula shared by two or more of its listed structures, MIST predicts a 4,096-bit
 Morgan fingerprint from every positive-mode spectrum, given that formula (peak formulas assigned within 20 ppm, the 10
