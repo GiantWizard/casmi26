@@ -21,3 +21,18 @@ products, so the reranker could over-trust popularity. Rows are therefore built 
 weighted to the estimated test mix, and evaluated on the NP panel separately.
 
 Next: row generator (Colab) that runs every channel with the fold-safe replacements and saves per-candidate features.
+
+## Result, 2026-10-22: the stacked reranker fails on the leaderboard
+
+| Submission | Public LB | Offline (simulated held-out molecules) |
+|---|---|---|
+| v465 copy | 0.456 | fusion 0.687 |
+| stack-full (v465 models + reranker) | **0.356** | reranker 0.803 (+0.116, CI +0.103..+0.129) |
+| stack-safe (fold-safe models + reranker) | **0.340** | same |
+
+The reranker learned "trust engine 1" (engine-1 score gap = 58% of importance). In the simulation engine 1 alone beats
+v465's fusion (0.769 vs 0.694); on the hidden test the opposite holds, so the reranker scores about like an engine-1-only
+pipeline (the v4n-era 0.38-0.40). Simulated test molecules built from held-out training structures do not reproduce the
+hidden test's balance between channels, even with every model fold-safe: a +0.116 offline gain became -0.100 on the LB.
+Consequence: no offline harness built from training structures can be trusted to rank pipeline-level changes; only the
+LB can.

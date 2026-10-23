@@ -51,3 +51,9 @@ Status 2026-10-12: obscure-NP set built and uploaded as private dataset `giantwi
 - Kaggle private datasets: `giantwizard/casmi26-jc-{bench,tims,mix,ftcode,glacier-ft,rk,rkrows,diag}`; fine-tuned weights `glacier_mix.pt`, `glacier_tims.pt` in `casmi26-jc-glacier-ft`.
 - Kaggle private notebooks: `giantwizard/casmi26-jc-{base,a,b,c,c2,base2,val,bench-run,bench2,bench3,diag-run,ft}`.
 - Colab (alt Google account, ~390 compute units): Drive `MyDrive/casmi26/`.
+
+## Stacked reranker offline check (2026-10-22)
+
+`bench/stack/train_stack.py` on `rowgen/rows_all.parquet` (1,550 simulated molecules, classes 1 and 2 only): v465 fusion MRR@25 0.6871, stacked 0.8026, gain +0.1155 (95% CI +0.103..+0.129). Leakage checks (script `stack_group_cv.py` in the 2026-10-22 session scratchpad): folds grouped by truth structure +0.1171, by truth scaffold +0.1116, scaffold folds with `pop`, `pop_zm`, `pc_top_pop` removed +0.0968. Only 27 truth structures repeat across molecules, so molecule folds were not leaking much. The gain survives all three. Enveda panel gain is smaller (+0.026 to +0.041 across the variants); class 2 non-panel molecules carry most of it.
+
+Not yet shown: transfer to the real pipeline. Rows use fold-safe models; `stack-full` (v465's own models + reranker) and `stack-safe` both ran on Kaggle 2026-10-22 but only the 12 visible molecules were reranked, so there is no score. Class 3 (~52% of hidden test) is not covered by these rows. Only a submission of `stack-full` reads the hidden test. Submission is Jeffery's call.
