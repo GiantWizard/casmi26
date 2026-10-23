@@ -53,3 +53,17 @@ Source: dmitriigluzdov "The Data Behind Spectra to Structures" (pulled copy in ~
 Decision: no new candidate bank. LOTUS/NPAtlas would add about 2.7k structures, and the one-change-per-version scores show
 no gain from the natural-product additions. The missing hidden answers are more likely in the pool and ranked too low, which
 is the stacked reranker's job.
+
+## Public frontier and forum, 2026-10-22
+
+Public best scores (notebook pages, "Best Score"): 0.464 for dmitriigluzdov "The Data Behind Spectra to Structures" (V20),
+guhongbin casmi26-v492-dg-v19, lavinwins casmi-26-lb-top-1, amrkhalid124 casmi26-upstream-data-v16, rajrajak99 apex-v800;
+0.463 for ahmedberatozer v22-n1-challenger and v25-unq. Private copy pushed: giantwizard/casmi26-jc-v492 (guhongbin v492, unchanged).
+
+Forum (discussion/750330, 751373, 751300):
+- Host: open-source data with non-commercial terms (e.g. CC BY-NC) is now allowed; NIST remains banned, including derived weights.
+- Host, 2026-10-22: weights trained on public libraries with public code are allowed; SIRIUS/CSI:FingerID are not;
+  structure-only pretrained models are allowed; "We need the code that generates the intermediates as well"; PubChemLite is fine.
+- Open question to the host: coleygroup MIST checkpoints released 2026-10-20 on Zenodo (record 23303289, MIT, trained on
+  MassSpecGym, training code public). Not yet confirmed.
+- Two participants report the same failure as ours: validation carved from training data improves offline but not on the LB.
