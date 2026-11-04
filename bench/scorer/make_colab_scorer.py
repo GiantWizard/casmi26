@@ -39,8 +39,11 @@ def get(cmd, dst):
             sh(f'cd {os.path.dirname(z)} && unzip -oq "{z}" && rm -f "{z}"')
         open(dst + '/.ok', 'w').close()
 get('kaggle competitions download enveda-CASMI26-molecule-id-mass-spectra -f train.parquet', R + '/comp')
-get('kaggle datasets download sanpier/casmi-spectrum-model-v1 --unzip', R + '/kit')
-get('kaggle datasets download metric/rdkit-2026-3-3-wheel --unzip', R + '/rdkit')
+# whole-dataset downloads return 404 for these two; fetch the needed files one by one (paths are kept)
+for f in ['config.json', 'train.py', 'prepare.py', 'model.py', 'features.py', 'README.txt']:
+    if not os.path.exists(R + f'/kit/casmi_spectrum_model_v1/{f}'):
+        sh(f'kaggle datasets download sanpier/casmi-spectrum-model-v1 -f casmi_spectrum_model_v1/{f} -p {R}/kit')
+get('kaggle datasets download metric/rdkit-2026-3-3-wheel -f rdkit-2026.3.3-cp312-cp312-manylinux_2_28_x86_64.whl', R + '/rdkit')
 whl = glob.glob(R + '/rdkit/**/rdkit-2026.3.3-cp312-*.whl', recursive=True)
 assert whl and sys.version_info[:2] == (3, 12), (whl, sys.version)
 sh(f'{sys.executable} -m pip install -q --no-deps {whl[0]}')
