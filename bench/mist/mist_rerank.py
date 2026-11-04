@@ -177,3 +177,30 @@ def selftest(train_path, model, device, n=60, seed=0):
     r = np.array(ranks)
     return dict(n=len(r), top1=float((r[:, 0] == 1).mean()), mean_rank=float(r[:, 0].mean()), mean_group=float(r[:, 1].mean()),
                 random_mean_rank=float(((r[:, 1] + 1) / 2).mean())) if len(r) else dict(n=0)
+
+
+def score_pairs(pairs, test, model, device):
+    """pairs: DataFrame with molecule_id, smiles. Returns a float array of MIST cosines (NaN where MIST cannot score:
+    negative-mode-only molecule, unrepresentable formula, or no assignable peak)."""
+    pos = test[test.adduct.isin(list(ION))]
+    by = {str(m): g for m, g in pos.groupby('molecule_id')}
+    forms = [formula_of(s) for s in pairs.smiles]
+    jobs, keys = [], []
+    for mid, f in set(zip(pairs.molecule_id.astype(str), forms)):
+        g = by.get(mid)
+        if g is None or f is None:
+            continue
+        for r in g.itertuples():
+            x = featurize(r.ms2_mzs, r.ms2_normalized_intensities, float(r.precursor_mz), f, ION[r.adduct])
+            if x is not None:
+                jobs.append(x); keys.append((mid, f))
+    pred = {}
+    for k, p in zip(keys, predict(model, jobs, device)):
+        pred.setdefault(k, []).append(p)
+    out = np.full(len(pairs), np.nan)
+    for i, (mid, smi, f) in enumerate(zip(pairs.molecule_id.astype(str), pairs.smiles, forms)):
+        ps = pred.get((mid, f))
+        fp = fingerprint(smi) if ps else None
+        if fp is not None:
+            out[i] = np.mean([cos(p, fp) for p in ps])
+    return out
