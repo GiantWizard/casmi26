@@ -3,8 +3,8 @@
 Its ranks 2-25 (and outside candidates) are ordered by 0.65 z(public spectrum model) + 0.35 z(retrained model); rank 1
 stays with the leader-safe rules. Here that blend becomes (1 - W) * blend + W * z(MIST cosine), z per molecule over the
 candidates MIST can score (others get 0). MIST: coleygroup/MIST augmented MSG checkpoint (bench/mist/mist_rerank.py),
-from the private dataset giantwizard/casmi26-mist. A cell before the pipeline loads MIST and prints its bug check, so the
-fast commit run already proves the install works.
+from the private dataset giantwizard/casmi26-mist. Right after the notebook's source/RDKit setup, MIST is loaded and its bug check printed, so
+the fast commit run already proves the install works.
 """
 import json, os
 
@@ -52,8 +52,9 @@ for tag, w in (('w15', 0.15), ('w25', 0.25)):
     s = ''.join(cells[i]['source'])
     assert s.count(A_OLD) == 1 and s.count(O_OLD) == 1
     s = s.replace(A_OLD, A_OLD + "        mist_blend(_a, 'final lists')\n").replace(O_OLD, O_OLD + "            mist_blend(_oa, 'outside candidates')\n")
-    cells[i]['source'] = s
-    cells.insert(i, {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': LOAD % dict(code=CODE, w=w)})
+    first = 'BUNDLE = materialise_sources()\n'           # installs the official RDKit wheel that MIST needs
+    assert s.startswith(first)
+    cells[i]['source'] = first + LOAD % dict(code=CODE, w=w) + s[len(first):]
     cells[0] = dict(cells[0], source=f'# jc-p2s481-mist-{tag}: jc-p2s481 (public 0.481, unchanged) + MIST as a third neural scorer at weight {w}. '
                     'Built by kernels/make_mist481.py.\n\n' + ''.join(cells[0]['source']))
     slug = f'casmi26-jc-p2s481-mist-{tag}'
