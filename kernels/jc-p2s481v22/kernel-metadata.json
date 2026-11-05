@@ -1,0 +1,32 @@
+{
+ "id": "giantwizard/casmi26-jc-p2s481v22",
+ "title": "casmi26-jc-p2s481v22",
+ "code_file": "casmi26-jc-p2s481v22.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": false,
+ "keywords": [],
+ "dataset_sources": [
+  "sanpier/casmi-spectrum-model-v1",
+  "dmitriigluzdov/casmi26-fold-safe-fpnet",
+  "dmitriigluzdov/casmi26-natural-product-knowledge-table",
+  "dmitriigluzdov/casmi26-natural-product-panel-benchmark",
+  "dmitriigluzdov/casmi26-pubchem-popularity-prior",
+  "dmitriigluzdov/casmi26-attributed-v4g-reproduction-assets",
+  "sanpier/catalogue-experiment-saner",
+  "qwertykeypadapple/casmi26-lotus-candidates",
+  "metric/rdkit-2026-3-3-wheel"
+ ],
+ "kernel_sources": [
+  "bgunshui/casmi26-scorer-train-public"
+ ],
+ "competition_sources": [
+  "enveda-CASMI26-molecule-id-mass-spectra"
+ ],
+ "model_sources": [],
+ "docker_image": "gcr.io/kaggle-private-byod/python@sha256:9a6bcfda6d03b2cd9aa347ee8c1bae62043328ed0f4afe9bda014e4f8bbf9435",
+ "machine_shape": "NvidiaTeslaT4"
+}
