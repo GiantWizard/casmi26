@@ -13,8 +13,9 @@ import json, os, sys
 
 TAU, K, LIB_TAU = float(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3])
 TAG = sys.argv[4]
-SRC = '/Users/b/casmi26-repo/kernels/jc-p2s481v22'
-nb0 = json.load(open(f'{SRC}/casmi26-jc-p2s481v22.ipynb')); meta0 = json.load(open(f'{SRC}/kernel-metadata.json'))
+SRC = sys.argv[5] if len(sys.argv) > 5 else '/Users/b/casmi26-repo/kernels/jc-p2s481v22'
+BASE = sys.argv[6] if len(sys.argv) > 6 else 'jc-p2s481v22'
+nb0 = json.load(open(next(f'{SRC}/{f}' for f in os.listdir(SRC) if f.endswith('.ipynb')))); meta0 = json.load(open(f'{SRC}/kernel-metadata.json'))
 CELL = r'''# ---- library-match rank 1 (kernels/make_xl.py): public spectra of structures absent from train.parquet ----
 def _xl_overlay(TAU=%(tau)s, K=%(k)s, LIB_TAU=%(lib)s):
     import glob, json, shutil, time
@@ -93,11 +94,12 @@ nb = json.loads(json.dumps(nb0)); cells = nb['cells']
 i = next(k for k, c in enumerate(cells) if c['cell_type'] == 'code' and ''.join(c['source']).startswith('LIB_MAX = {}'))
 cells.insert(i + 1, {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [],
                      'source': CELL % dict(tau=TAU, k=K, lib=LIB_TAU)})
-cells[0] = dict(cells[0], source=f'# jc-p2s481v22-xl-{TAG}: jc-p2s481v22 (0.478 copy of public 0.481) + library-match rank 1 '
+cells[0] = dict(cells[0], source=f'# {BASE}-xl-{TAG}: {BASE} + library-match rank 1 '
                 f'(TAU {TAU}, K {K}, LIB_TAU {LIB_TAU}). Built by kernels/make_xl.py.\n\n' + ''.join(cells[0]['source']))
-slug = f'casmi26-jc-p2s481v22-xl-{TAG}'
+slug = f'casmi26-{BASE}-xl-{TAG}'
 d = f'/Users/b/casmi26-repo/kernels/xl/{TAG}'; os.makedirs(d, exist_ok=True)
 json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
-json.dump(dict(meta0, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb',
+meta0 = {k: v for k, v in meta0.items() if k != 'id_no'}
+json.dump(dict(meta0, is_private=True, id=f'giantwizard/{slug}', title=slug, code_file=f'{slug}.ipynb',
                dataset_sources=meta0['dataset_sources'] + ['giantwizard/casmi26-extlib']), open(f'{d}/kernel-metadata.json', 'w'), indent=1)
 print('wrote', d)
