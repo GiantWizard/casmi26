@@ -8,6 +8,7 @@ Offline (bench/seenbias): +0.011 MRR on unseen answers, +0.037 on seen; true ans
 """
 import json, os, sys
 C, PEN, TAG = float(sys.argv[1]), float(sys.argv[2]), sys.argv[3]
+R1 = len(sys.argv) > 4 and sys.argv[4] == 'r1'
 SRC = '/Users/b/casmi26-repo/kernels/jc-pop481'
 nb0 = json.load(open(f'{SRC}/casmi26-jc-pop481.ipynb')); meta0 = json.load(open(f'{SRC}/kernel-metadata.json'))
 CELL = r'''# ---- spectral-mismatch penalty (kernels/make_mm.py): seen candidates whose comparable library spectra do not match ----
@@ -81,11 +82,22 @@ print('[mm]', MM_REPORT, flush=True)
 '''
 OLD = "rest.sort(key=lambda _s: _score_cand(_s) + _v8_pen.get(_s, 0.0), reverse=True)"
 NEW = "rest.sort(key=lambda _s: _score_cand(_s) + _v8_pen.get(_s, 0.0) + MM_PEN.get(str(mid), {}).get(_s, 0.0), reverse=True)"
+OLD2 = "        rows.append((mid, [leader] + rest))"
+NEW2 = '''        _mm = MM_PEN.get(str(mid), {})                     # mm rank 1: a penalised leader yields to the best unpenalised candidate
+        if MM_R1 and leader in _mm:
+            _alt = next((x for x in rest if x not in _mm), None)
+            if _alt is not None:
+                rest = [x for x in rest if x != _alt] + [leader]
+                rest.sort(key=lambda _s: (_score_cand(_s) if (rest and cinfo) else 0.0) + _mm.get(_s, 0.0), reverse=True) if cinfo else None
+                leader = _alt; counts['mm_leader_swaps'] = counts.get('mm_leader_swaps', 0) + 1
+        rows.append((mid, [leader] + rest))'''
 nb = json.loads(json.dumps(nb0)); cells = nb['cells']
 i = next(k for k, c in enumerate(cells) if c['cell_type'] == 'code' and 'def pxm_merge' in ''.join(c['source']))
-s = ''.join(cells[i]['source']); assert s.count(OLD) == 1; cells[i]['source'] = s.replace(OLD, NEW)
-cells.insert(i, {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': CELL % dict(c=C, pen=PEN)})
-cells[0] = dict(cells[0], source=f'# jc-pop481-mm-{TAG}: exact copy of popwenman 0.481 + spectral-mismatch penalty on ranks 2-25 (C {C}, PEN {PEN}). '
+s = ''.join(cells[i]['source']); assert s.count(OLD) == 1 and s.count(OLD2) == 1; s = s.replace(OLD, NEW)
+if R1: s = s.replace(OLD2, NEW2)
+cells[i]['source'] = s
+cells.insert(i, {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [], 'source': CELL % dict(c=C, pen=PEN) + f'MM_R1 = {R1}\n'})
+cells[0] = dict(cells[0], source=f'# jc-pop481-mm-{TAG}: exact copy of popwenman 0.481 + spectral-mismatch penalty on ranks 2-25 (C {C}, PEN {PEN}, rank-1 rule {R1}). '
                 'Built by kernels/make_mm.py.\n\n' + ''.join(cells[0]['source']))
 slug = f'casmi26-jc-pop481-mm-{TAG}'; d = f'/Users/b/casmi26-repo/kernels/mm/{TAG}'; os.makedirs(d, exist_ok=True)
 json.dump(nb, open(f'{d}/{slug}.ipynb', 'w'), indent=1)
